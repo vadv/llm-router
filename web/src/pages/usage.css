@@ -1,0 +1,386 @@
+.ux-report {
+  --line: var(--mantine-color-default-border);
+  --soft: var(--mantine-color-default-hover);
+  --muted: var(--mantine-color-dimmed);
+  --ink: var(--mantine-color-text);
+  --accent: var(--mantine-color-teal-light-color);
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.ux-report > *,
+.ux-filters > *,
+.ux-range > *,
+.ux-toolbar > *,
+.ux-table-controls > * {
+  min-width: 0;
+}
+.ux-controls,
+.ux-chart,
+.ux-breakdown,
+.ux-empty {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--mantine-color-body);
+  padding: clamp(12px, 1.5vw, 20px);
+}
+.ux-range,
+.ux-filters,
+.ux-toolbar,
+.ux-table-head,
+.ux-table-controls,
+.ux-inspect,
+.ux-legend,
+.ux-coverage,
+.ux-toolbar > div,
+.ux-shortcuts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.ux-range,
+.ux-filters {
+  align-items: end;
+}
+.ux-range {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 14px;
+}
+.ux-range input {
+  max-width: 100%;
+  min-width: 0;
+}
+.ux-range small,
+.ux-range [role="alert"],
+.ux-controls > small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ux-range small,
+.ux-link,
+.ux-table-head a,
+.ux-scroll tbody button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ux-range small {
+  margin-inline-start: auto;
+  align-self: center;
+}
+.ux-range [role="alert"] {
+  color: var(--mantine-color-red-light-color);
+  width: 100%;
+}
+.ux-filters {
+  padding-top: 10px;
+}
+.ux-filters > :not(button) {
+  flex: 1 1 115px;
+}
+.ux-report label {
+  font-size: 12px;
+  font-weight: 550;
+}
+.ux-shortcuts button,
+.ux-link,
+.ux-go,
+.ux-table-head a,
+.ux-scroll button,
+.ux-inspect button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.ux-shortcuts {
+  gap: 2px;
+}
+.ux-shortcuts button,
+.ux-link,
+.ux-table-head a {
+  font-size: 12px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  color: var(--accent);
+}
+.ux-shortcuts button:hover,
+.ux-link:hover,
+.ux-inspect button:hover,
+.ux-table-head a:hover {
+  background: var(--soft);
+}
+.ux-controls > .ux-link {
+  margin-top: 6px;
+}
+.ux-go {
+  display: grid;
+  place-items: center;
+}
+.ux-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px clamp(24px, 5vw, 84px);
+  padding-bottom: 14px;
+}
+.ux-caption {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ux-summary h2,
+.ux-summary strong {
+  display: block;
+  margin: 2px 0;
+  font-weight: 630;
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.ux-summary h2 {
+  font-size: clamp(25px, 3vw, 38px);
+}
+.ux-summary strong {
+  font-size: clamp(22px, 2.5vw, 30px);
+}
+.ux-summary p,
+.ux-table-head p,
+.ux-footnote,
+.ux-legend,
+.ux-inspect,
+.ux-coverage,
+.usage-activity > small {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.ux-summary p,
+.ux-table-head p,
+.ux-footnote {
+  margin: 3px 0 0;
+}
+.ux-summary b {
+  font-weight: 550;
+  color: var(--ink);
+}
+.ux-summary p span {
+  margin: 0 2px;
+}
+.ux-toolbar,
+.ux-table-head,
+.ux-table-controls {
+  justify-content: space-between;
+}
+.ux-toolbar {
+  border-top: 1px solid var(--line);
+  padding: 12px 0;
+  align-items: end;
+}
+.ux-toolbar > div {
+  align-items: end;
+}
+.ux-toolbar .mantine-Select-root {
+  width: 145px;
+  max-width: 100%;
+}
+.ux-report select {
+  background: var(--mantine-color-body);
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 5px;
+  margin-inline-start: 4px;
+  font: inherit;
+  cursor: pointer;
+  max-width: 100%;
+}
+.usage-activity {
+  --ov-muted: var(--muted);
+  --ov-accent: var(--mantine-color-teal-6);
+  --ov-border: var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.ux-legend {
+  gap: 12px;
+}
+.ux-legend > span {
+  margin-inline-end: auto;
+}
+.ux-legend b {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+}
+.ux-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.usage-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 9px;
+}
+.usage-grid .calls-plot {
+  height: clamp(125px, 14vw, 172px);
+  touch-action: pan-y;
+  user-select: none;
+}
+.usage-grid .calls-x {
+  grid-column: 2;
+  margin: 0;
+  gap: 6px;
+}
+.usage-grid .calls-stack {
+  max-width: none;
+  width: 82%;
+}
+.ux-inspect {
+  background: var(--soft);
+  border-radius: 7px;
+  padding: 7px 10px;
+}
+.ux-inspect strong {
+  color: var(--ink);
+}
+.ux-inspect > span {
+  margin-inline-start: auto;
+}
+.ux-inspect button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 27px;
+  min-height: 26px;
+  vertical-align: middle;
+}
+.ux-inspect button:disabled {
+  opacity: 0.35;
+  cursor: auto;
+}
+.ux-coverage:not(:empty) {
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+  padding-top: 8px;
+}
+.ux-table-head h2,
+.ux-empty h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 620;
+}
+.ux-table-head a {
+  text-decoration: none;
+  font-weight: 600;
+}
+.ux-table-controls {
+  margin: 14px 0 10px;
+}
+.ux-scroll {
+  max-width: 100%;
+  overflow: auto;
+}
+.ux-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.ux-scroll th,
+.ux-scroll td {
+  text-align: right;
+  padding: 9px 7px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+.ux-scroll th:first-child {
+  text-align: left;
+}
+.ux-scroll thead th {
+  background: var(--soft);
+  color: var(--muted);
+}
+.ux-scroll th[aria-sort] {
+  color: var(--ink);
+}
+.ux-scroll button {
+  padding: 1px 0;
+  text-align: inherit;
+}
+.ux-scroll tbody button {
+  color: var(--accent);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+.ux-scroll tbody tr:hover {
+  background: var(--soft);
+}
+.ux-scroll small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+.ux-footnote {
+  margin-top: 10px;
+  max-width: 95ch;
+}
+.ux-empty p {
+  color: var(--muted);
+  margin: 4px 0;
+}
+@media (max-width: 650px) {
+  .ux-range {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .ux-range input {
+    padding-inline: 4px;
+    font-size: 11px;
+  }
+  .ux-range small {
+    grid-column: 1/-1;
+    margin: 0;
+  }
+  .ux-range [role="alert"] {
+    grid-column: 1/-1;
+  }
+  .ux-shortcuts {
+    justify-content: end;
+  }
+  .ux-shortcuts button {
+    padding-inline: 5px;
+  }
+  .ux-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ux-table-controls .mantine-TextInput-root {
+    flex: 1;
+    min-width: 104px;
+  }
+  .ux-summary {
+    gap: 12px 20px;
+  }
+  .ux-inspect {
+    gap: 3px 6px;
+  }
+  .ux-inspect > span {
+    width: 100%;
+  }
+  .ux-table-head a {
+    padding-inline: 0;
+  }
+  .ux-toolbar .mantine-Select-root {
+    width: 116px;
+  }
+  .ux-scroll tbody th:first-child {
+    min-width: 100px;
+  }
+}

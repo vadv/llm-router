@@ -1,0 +1,194 @@
+.balance-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.85rem 0 1rem;
+}
+.balance-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 2rem;
+  font-size: 0.78rem;
+}
+.balance-filter b {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+.balance-filter[aria-pressed="true"] {
+  background: var(--mantine-color-teal-light);
+  border-color: var(--mantine-color-teal-outline);
+  color: var(--mantine-color-teal-light-color);
+}
+.balance-filter i {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+}
+.balance-filter i[data-risk="low"] {
+  background: var(--mantine-color-orange-6);
+}
+.balance-filter i[data-risk="exhausted"] {
+  background: var(--mantine-color-red-6);
+}
+.balance-grid {
+  columns: 25rem 2;
+  column-gap: 0.85rem;
+}
+.balance-grid > article {
+  display: inline-block;
+  vertical-align: top;
+  width: 100%;
+  margin-bottom: 0.85rem;
+  break-inside: avoid;
+}
+.balance-facts {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) 1fr;
+  gap: 0.35rem 0.75rem;
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--mantine-color-default-hover);
+  font-size: 0.8rem;
+}
+.balance-facts dt {
+  color: var(--mantine-color-dimmed);
+}
+.balance-facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.balance-card,
+.balance-empty {
+  min-width: 0;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 0.75rem;
+  background: var(--mantine-color-default);
+  overflow: hidden;
+}
+.balance-card > header,
+.balance-brand,
+.balance-reading-head,
+.balance-meta,
+.balance-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.balance-card > header,
+.balance-reading-head {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.balance-card > header {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+.balance-brand {
+  min-width: 0;
+  gap: 0.6rem;
+}
+.balance-card h2,
+.balance-card h3,
+.balance-empty h3 {
+  margin: 0;
+}
+.balance-brand h2 {
+  font: 600 0.95rem var(--mantine-font-family-monospace);
+  overflow-wrap: anywhere;
+}
+.balance-card section {
+  padding: 0.8rem 1rem;
+}
+.balance-card section + section {
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+.balance-account {
+  background: linear-gradient(108deg, var(--mantine-color-teal-light), transparent 84%);
+}
+.balance-card h3 {
+  font-size: 0.67rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mantine-color-dimmed);
+}
+.balance-account h3 {
+  color: var(--mantine-color-teal-light-color);
+}
+.balance-reading {
+  margin-top: 0.6rem;
+}
+.balance-reading + .balance-reading {
+  border-top: 1px dashed var(--mantine-color-default-border);
+  padding-top: 0.6rem;
+}
+.balance-reading-head > div {
+  min-width: 0;
+  flex: 1 1 8rem;
+}
+.balance-resource,
+.balance-meta,
+.balance-card footer {
+  font-size: 0.75rem;
+  color: var(--mantine-color-dimmed);
+  overflow-wrap: anywhere;
+}
+.balance-resource {
+  font-family: var(--mantine-font-family-monospace);
+}
+.balance-amount {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+.balance-amount strong {
+  font-size: 1.15rem;
+  line-height: 1.3;
+}
+.balance-account .balance-amount strong {
+  font-size: 1.6rem;
+  letter-spacing: -0.035em;
+}
+.balance-amount span {
+  font-size: 0.8rem;
+}
+.balance-meter {
+  height: 4px;
+  margin-top: 0.55rem;
+  background: var(--mantine-color-default-hover);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.balance-meter i {
+  display: block;
+  height: 100%;
+  background: var(--mantine-color-teal-6);
+}
+.balance-reading[data-risk="low"] .balance-meter i {
+  background: var(--mantine-color-orange-6);
+}
+.balance-meta {
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+.balance-meta:not(:empty) {
+  margin-top: 0.45rem;
+}
+.balance-card footer {
+  padding: 0.45rem 1rem;
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+.balance-card footer span {
+  font-size: inherit;
+}
+.balance-empty {
+  padding: 1.25rem;
+}

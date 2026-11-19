@@ -1,0 +1,638 @@
+/* Chat prototype: a calm reading column inside the existing workspace.
+   All colors come from Mantine variables; the chat adds no second palette. */
+
+/* Composer -------------------------------------------------------------- */
+
+.chat-composer-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 14px;
+  background: var(--mantine-color-default);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-mantine-color-scheme="dark"] .chat-composer-box {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.chat-composer-input {
+  flex: 1;
+}
+
+.chat-send {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+}
+
+/* Stream errors: a plain banner above the composer, outside the thread. */
+.chat-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--mantine-color-red-3);
+  border-radius: 10px;
+  color: var(--mantine-color-red-6);
+  background: light-dark(var(--mantine-color-red-0), rgba(255, 62, 62, 0.08));
+}
+
+.chat-fixture-note {
+  margin: 12px 0;
+  text-align: center;
+}
+
+/* Messages -------------------------------------------------------------- */
+
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-block: 8px 24px;
+}
+
+/* User block: quiet gray bubble on the right, no avatar, no label. */
+.chat-user-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.chat-user-bubble {
+  max-width: 72%;
+  background: var(--mantine-color-default-hover);
+  border-radius: 14px;
+  padding: 10px 14px;
+  overflow-wrap: anywhere;
+}
+
+.chat-assistant {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chat-assistant-caption {
+  font-size: 13px;
+  color: var(--mantine-color-dimmed);
+}
+
+.chat-message-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-dimmed);
+}
+
+.chat-assistant-actions {
+  opacity: 1;
+}
+
+/* Message actions: visible on hover and keyboard focus, always on touch. */
+.chat-msg-actions {
+  display: inline-flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.chat-user-row:hover .chat-msg-actions,
+.chat-user-row:focus-within .chat-msg-actions {
+  opacity: 1;
+}
+
+.chat-icon-btn {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 6px;
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--mantine-color-dimmed);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.chat-icon-btn:hover:not(:disabled) {
+  background: var(--mantine-color-default-hover);
+  color: var(--mantine-color-text);
+}
+
+.chat-icon-btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.chat-icon-btn:focus-visible,
+.chat-reasoning-toggle:focus-visible,
+.chat-tool-head:focus-visible,
+.chat-copy:focus-visible {
+  outline: 2px solid var(--mantine-color-teal-5);
+  outline-offset: 1px;
+}
+
+.chat-action-wrap {
+  display: inline-flex;
+}
+
+/* Reasoning -------------------------------------------------------------- */
+
+.chat-reasoning {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-reasoning-toggle {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--mantine-color-dimmed);
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.chat-reasoning-toggle:hover {
+  color: var(--mantine-color-text);
+}
+
+.chat-reasoning-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--mantine-color-dimmed);
+  border-left: 2px solid var(--mantine-color-default-border);
+  padding-left: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* The class display rules above would otherwise beat the hidden attribute. */
+.chat-reasoning-body[hidden],
+.chat-tool-body[hidden] {
+  display: none;
+}
+
+/* Tool cards -------------------------------------------------------------- */
+
+.chat-tool {
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.chat-tool + .chat-tool {
+  margin-top: 8px;
+}
+
+.chat-tool-head,
+.chat-tool-head-static {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.chat-tool-head {
+  appearance: none;
+  border: 0;
+  background: none;
+  text-align: left;
+  color: var(--mantine-color-text);
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.chat-tool-head:hover {
+  background: var(--mantine-color-default-hover);
+}
+
+.chat-tool-title {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* Status carries a text label, so color is never the only signal. */
+.chat-tool-status {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+
+.chat-tool-status.is-ok {
+  color: var(--mantine-color-teal-6);
+}
+
+.chat-tool-status.is-error {
+  color: var(--mantine-color-red-6);
+}
+
+.chat-spin {
+  animation: chat-spin 0.9s linear infinite;
+  color: var(--mantine-color-teal-6);
+}
+
+@keyframes chat-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-spin {
+    animation: none;
+  }
+}
+
+.chat-tool-chevron {
+  flex: 0 0 auto;
+  color: var(--mantine-color-dimmed);
+  transition: transform 140ms ease;
+}
+
+.chat-tool-chevron[data-open="true"] {
+  transform: rotate(180deg);
+}
+
+.chat-tool-summary {
+  padding: 0 12px 8px 36px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mantine-color-dimmed);
+  overflow-wrap: anywhere;
+}
+
+.chat-tool-body,
+.chat-tool-static-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 10px 36px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.chat-tool-body {
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+.chat-tool-static-body {
+  padding-top: 2px;
+}
+
+.chat-tool-label {
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.chat-tool-note {
+  color: var(--mantine-color-dimmed);
+  overflow-wrap: anywhere;
+}
+
+.chat-tool-args {
+  overflow-wrap: anywhere;
+}
+
+.chat-tool-results {
+  margin: 0;
+  padding-inline-start: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-tool-error {
+  margin: 0;
+  color: var(--mantine-color-red-6);
+  overflow-wrap: anywhere;
+}
+
+.chat-tool-console {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--mantine-color-default-hover);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-quote {
+  overflow-wrap: anywhere;
+}
+
+/* Sources ------------------------------------------------------------------ */
+
+.chat-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mantine-color-dimmed);
+}
+
+.chat-sources-label {
+  font-weight: 600;
+}
+
+.chat-link {
+  color: var(--mantine-color-teal-6);
+  text-decoration: none;
+}
+
+.chat-link:hover {
+  text-decoration: underline;
+}
+
+.chat-unsafe-url {
+  color: var(--mantine-color-dimmed);
+}
+
+/* Markdown ------------------------------------------------------------------ */
+
+/* Answer text is larger and limited to ~72ch; code blocks, tables and tool
+   cards use the full column width. */
+.chat-md {
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.chat-md > * + * {
+  margin-top: 12px;
+}
+
+.chat-md > :not(.chat-code):not(table) {
+  max-width: 72ch;
+}
+
+.chat-md h1,
+.chat-md h2,
+.chat-md h3,
+.chat-md h4 {
+  font-weight: 650;
+  margin: 0;
+}
+
+.chat-md h1 {
+  font-size: 1.13em;
+}
+
+.chat-md h2 {
+  font-size: 1.07em;
+}
+
+.chat-md h3,
+.chat-md h4 {
+  font-size: 1em;
+}
+
+.chat-md h1 + *,
+.chat-md h2 + *,
+.chat-md h3 + *,
+.chat-md h4 + * {
+  margin-top: 6px;
+}
+
+.chat-md ul,
+.chat-md ol {
+  margin: 0;
+  padding-inline-start: 1.4em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-md blockquote {
+  margin: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--mantine-color-default-border);
+  color: var(--mantine-color-dimmed);
+}
+
+.chat-md hr {
+  border: 0;
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+.chat-md table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.chat-md th,
+.chat-md td {
+  border: 1px solid var(--mantine-color-default-border);
+  padding: 4px 10px;
+  text-align: left;
+}
+
+.chat-md th {
+  background: var(--mantine-color-default-hover);
+}
+
+.chat-md :not(pre) > code {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.86em;
+  background: var(--mantine-color-default-hover);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+  overflow-wrap: anywhere;
+}
+
+/* Code block: dark surface in both themes, header with language and copy. */
+.chat-code {
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+[data-mantine-color-scheme="dark"] .chat-code {
+  background: var(--mantine-color-dark-8);
+}
+
+.chat-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  color: #8b949e;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chat-code-lang {
+  font-family: var(--mantine-font-family-monospace);
+  overflow-wrap: anywhere;
+}
+
+.chat-copy {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 5px;
+  color: #8b949e;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.chat-copy:hover {
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chat-code pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+
+.chat-code pre code {
+  background: none;
+  padding: 0;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* History and memory drawers ---------------------------------------------- */
+
+.chat-drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100%;
+}
+
+.chat-drawer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.chat-memory-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.chat-memory-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-memory-topic {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.chat-memory-note {
+  font-size: 13px;
+  color: var(--mantine-color-dimmed);
+  overflow-wrap: anywhere;
+}
+
+.chat-memory-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.chat-memory-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-edit-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--mantine-color-dimmed);
+}
+
+/* Mobile -------------------------------------------------------------------- */
+
+@media (max-width: 48em) {
+  .chat-user-bubble {
+    max-width: 88%;
+  }
+
+  /* No hover on touch: actions stay visible. */
+  .chat-msg-actions {
+    opacity: 1;
+  }
+
+  /* Touch targets of at least 44px. */
+  .chat-tool-head,
+  .chat-tool-head-static {
+    min-height: 44px;
+  }
+
+  .chat-icon-btn,
+  .chat-reasoning-toggle {
+    min-height: 44px;
+  }
+
+  .chat-copy {
+    min-height: 44px;
+  }
+
+  .chat-tool-summary,
+  .chat-tool-body,
+  .chat-tool-static-body {
+    padding-left: 12px;
+  }
+}

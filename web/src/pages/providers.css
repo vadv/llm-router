@@ -1,0 +1,368 @@
+.pv-page {
+  --pv-line: var(--mantine-color-default-border);
+  --pv-muted: var(--mantine-color-dimmed);
+  --pv-accent: var(--mantine-color-teal-light-color);
+}
+.pv-page h2,
+.pv-page h3,
+.pv-page h4,
+.pv-page p {
+  margin: 0;
+}
+.pv-page h2 {
+  font-size: 1.08rem;
+}
+.pv-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 16px 0;
+  border: 1px solid var(--pv-line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.pv-totals > div {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  padding: 14px 20px;
+}
+.pv-totals > div + div {
+  border-inline-start: 1px solid var(--pv-line);
+}
+.pv-kicker,
+.pv-totals small {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pv-muted);
+}
+.pv-totals strong {
+  font-size: 1.7rem;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.pv-totals span,
+.pv-page .pv-directory-note,
+.pv-list-head p,
+.pv-list-empty p,
+.pv-empty p {
+  font-size: 0.76rem;
+  color: var(--pv-muted);
+}
+.pv-free-text,
+.pv-directory-list em {
+  color: var(--pv-accent);
+  font-style: normal;
+}
+.pv-layout {
+  display: grid;
+  grid-template-columns: minmax(205px, 0.32fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.pv-directory,
+.pv-inventory,
+.pv-empty {
+  border: 1px solid var(--pv-line);
+  border-radius: 14px;
+  min-width: 0;
+}
+.pv-directory {
+  padding: 16px 10px 12px;
+}
+.pv-directory-head {
+  padding: 0 5px 12px;
+}
+.pv-switch {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  margin-top: 10px;
+  background: var(--mantine-color-default-hover);
+  border-radius: 8px;
+}
+.pv-switch a {
+  padding: 4px 10px;
+  color: var(--pv-muted);
+  text-decoration: none;
+  font-size: 0.77rem;
+  border-radius: 6px;
+}
+.pv-switch a[aria-current] {
+  background: var(--mantine-color-body);
+  color: var(--mantine-color-text);
+  box-shadow: 0 1px 3px #0002;
+  font-weight: 650;
+}
+.pv-directory-list {
+  display: grid;
+  gap: 2px;
+}
+.pv-directory-list a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 9px 8px;
+  text-decoration: none;
+  color: inherit;
+}
+.pv-directory-list a:hover,
+.pv-models li:hover {
+  background: var(--mantine-color-default-hover);
+}
+.pv-directory-list a[aria-current] {
+  background: var(--mantine-color-teal-light);
+  border-color: color-mix(in srgb, var(--pv-accent) 30%, transparent);
+}
+.pv-connection-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pv-directory-list strong {
+  display: block;
+  font-size: 0.86rem;
+}
+.pv-directory-list small,
+.pv-engine small,
+.pv-model-spec small {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--pv-muted);
+}
+.pv-directory .pv-directory-note {
+  margin: 12px 5px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--pv-line);
+}
+.pv-picker {
+  display: none;
+}
+.pv-inventory {
+  padding: clamp(14px, 2vw, 24px);
+}
+.pv-inventory-head,
+.pv-list-head,
+.pv-identity,
+.pv-context,
+.pv-engine,
+.pv-related,
+.pv-tag,
+.pv-model-title,
+.pv-model-spec a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pv-inventory-head,
+.pv-list-head {
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pv-identity {
+  gap: 12px;
+  min-width: 0;
+}
+.pv-identity h2 {
+  font-size: 1.45rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.pv-tag {
+  display: inline-flex;
+  width: fit-content;
+  flex: none;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 1px solid var(--pv-line);
+  border-radius: 6px;
+  font-size: 0.69rem;
+  color: var(--pv-muted);
+  font-weight: 550;
+}
+.pv-tag.is-free {
+  color: var(--pv-accent);
+  border-color: transparent;
+  background: var(--mantine-color-teal-light);
+}
+.pv-context {
+  flex-wrap: wrap;
+  column-gap: 15px;
+  margin: 12px 0;
+  font-size: 0.76rem;
+  color: var(--pv-muted);
+}
+.pv-context b {
+  color: var(--mantine-color-text);
+}
+.pv-engine {
+  background: var(--mantine-color-default-hover);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.pv-list-head {
+  border-top: 1px solid var(--pv-line);
+  margin-top: 14px;
+  padding-top: 16px;
+}
+.pv-list-head > div:first-child {
+  flex: 1 1 230px;
+}
+.pv-list-head h3 {
+  font-size: 1rem;
+}
+.pv-related {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pv-related a,
+.pv-model-spec a,
+.pv-empty a,
+.pv-page button:not([class]) {
+  color: var(--pv-accent);
+  font-size: 0.76rem;
+}
+.pv-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(135px, 0.45fr);
+  gap: 8px;
+  margin: 14px 0 8px;
+}
+.pv-count,
+.pv-index-note {
+  font-size: 0.72rem;
+  color: var(--pv-muted);
+  margin: 8px 0;
+}
+.pv-models {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.pv-models li {
+  border-top: 1px solid var(--pv-line);
+  padding: 14px 0;
+  display: grid;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 0.3fr);
+  gap: 16px;
+}
+.pv-model-title {
+  flex-wrap: wrap;
+  gap: 5px 8px;
+}
+.pv-model-title h4 {
+  font-size: 0.96rem;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+.pv-model-main {
+  min-width: 0;
+}
+.pv-brief {
+  margin: 6px 0 4px;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+.pv-brief span {
+  display: block;
+  color: var(--pv-muted);
+  font-size: 0.65rem;
+  font-weight: 650;
+}
+.pv-model-spec {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+}
+.pv-model-spec strong {
+  font: 600 0.78rem var(--mantine-font-family-monospace);
+}
+.pv-model-spec a {
+  gap: 5px;
+  margin-top: 4px;
+}
+.pv-model-spec small.pv-seen {
+  font-size: 0.64rem;
+}
+.pv-empty,
+.pv-list-empty {
+  padding: 24px 16px;
+}
+.pv-page a:focus-visible,
+.pv-page button:focus-visible {
+  outline: 2px solid var(--pv-accent);
+  outline-offset: 2px;
+}
+@media (max-width: 760px) {
+  .pv-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .pv-directory {
+    padding: 12px;
+  }
+  .pv-directory-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0;
+  }
+  .pv-switch {
+    margin: 0;
+  }
+  .pv-picker {
+    display: block;
+    margin-top: 6px;
+  }
+  .pv-directory-list {
+    display: none;
+  }
+  .pv-directory .pv-directory-note {
+    padding: 0;
+    border: 0;
+    margin: 6px 0 0;
+  }
+  .pv-totals > div {
+    padding: 10px;
+  }
+  .pv-totals {
+    margin: 12px 0;
+  }
+  .pv-totals span {
+    font-size: 0.67rem;
+  }
+}
+@media (max-width: 490px) {
+  .pv-models li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .pv-model-spec {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    column-gap: 6px;
+  }
+  .pv-model-spec a {
+    margin: 0 0 0 auto;
+  }
+  .pv-seen {
+    flex-basis: 100%;
+  }
+  .pv-totals small {
+    letter-spacing: 0;
+  }
+  .pv-controls {
+    grid-template-columns: minmax(0, 1fr) 128px;
+  }
+  .pv-inventory {
+    padding: 12px;
+  }
+}

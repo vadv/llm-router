@@ -1,0 +1,12 @@
+listen: "127.0.0.1:8090"
+data_dir: ".data"
+
+client_keys:
+  - alias: "local"
+    secret: "replace-with-a-long-random-client-key"
+
+providers:
+  - provider_id: "openrouter"
+    driver: "openrouter"
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "replace-with-your-openrouter-key"
