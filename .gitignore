@@ -1,0 +1,31 @@
+# Local specs and working notes (not distributed)
+/docs/
+/.workbuddy-ai/
+
+# OS metadata
+.DS_Store
+
+# Harness session data
+/.pi/
+/.ovis/
+
+# Cargo
+/target
+/dist/
+
+# Web UI build output and caches
+/web/node_modules
+/web/dist
+/web/tsconfig.tsbuildinfo
+
+# Screenshots from the UI check script
+/shots
+
+# Deployment material with real credentials
+/deploy/
+
+# Default config path when the binary is run from the repo root
+/config.yaml
+
+# Local router data (battle config runs from repo root)
+/.data/

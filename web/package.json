@@ -1,0 +1,35 @@
+{
+  "name": "llm-router-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "check": "node scripts/check-math.mjs && node scripts/check-chat.mjs && node scripts/check-sse.mjs && node scripts/check-tools.mjs && node scripts/check-store.mjs"
+  },
+  "dependencies": {
+    "@assistant-ui/ai-sdk": "^0.0.19",
+    "@assistant-ui/react": "^0.15.37",
+    "@assistant-ui/react-markdown": "^0.14.26",
+    "@jitl/quickjs-wasmfile-release-sync": "^0.32.0",
+    "@mantine/core": "^9.8.1",
+    "@mantine/hooks": "^9.8.1",
+    "@mantine/notifications": "^9.8.1",
+    "@tabler/icons-react": "^3.52.0",
+    "ai": "^7.0.177",
+    "quickjs-emscripten-core": "^0.32.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}

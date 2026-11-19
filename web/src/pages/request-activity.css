@@ -1,0 +1,221 @@
+.calls-report,
+.calls-quiet {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.calls-report {
+  --calls-ok: var(--mantine-color-teal-6);
+  --calls-error: var(--mantine-color-red-6);
+  --calls-cancel: var(--mantine-color-yellow-6);
+  --calls-other: var(--mantine-color-gray-6);
+}
+.calls-stats {
+  display: flex;
+  gap: clamp(16px, 4vw, 64px);
+  flex-wrap: wrap;
+}
+.calls-stats > div,
+.calls-bin-head > div:last-child {
+  display: grid;
+  gap: 2px;
+}
+.calls-stats span,
+.calls-report p,
+.calls-quiet span,
+.calls-chart-key,
+.calls-bin-head small,
+.calls-x,
+.calls-y {
+  color: var(--ov-muted);
+  font-size: 12px;
+}
+.calls-stats strong {
+  font-size: clamp(18px, 2vw, 26px);
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+}
+.calls-stats strong small {
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.calls-chart-key,
+.calls-chart-key div,
+.calls-bin-values,
+.calls-bin-values span,
+.calls-chart-key span,
+.calls-inspector,
+.calls-bin-head,
+.calls-shift {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.calls-chart-key {
+  justify-content: space-between;
+}
+.calls-bin-values i,
+.calls-chart-key i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.calls-report [data-kind="ok"] {
+  background: var(--calls-ok);
+}
+.calls-report [data-kind="errors"] {
+  background: var(--calls-error);
+}
+.calls-report [data-kind="cancels"] {
+  background: var(--calls-cancel);
+}
+.calls-report [data-kind="other"] {
+  background: var(--calls-other);
+}
+.calls-plot-wrap {
+  display: flex;
+  gap: 6px;
+}
+.calls-y {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 2ch;
+  text-align: right;
+  font-size: 10px;
+}
+.calls-plot {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  height: 106px;
+  border-block: 1px solid var(--ov-border);
+  background: linear-gradient(
+    transparent calc(50% - 0.5px),
+    var(--ov-border) 50%,
+    transparent calc(50% + 0.5px)
+  );
+  cursor: crosshair;
+}
+.calls-plot:focus-visible {
+  outline: 2px solid var(--ov-accent);
+  outline-offset: 3px;
+}
+.calls-slot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+}
+.calls-slot[data-inspect],
+.calls-slot[data-selected] {
+  background: var(--mantine-color-teal-light);
+  box-shadow: inset 0 -2px var(--ov-accent);
+}
+.calls-slot[data-open] {
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 3px,
+    var(--ov-border) 3px 4px
+  );
+}
+.calls-stack {
+  width: clamp(1px, 84%, 28px);
+  display: flex;
+  flex-direction: column-reverse;
+  overflow: hidden;
+  border-radius: 2px 2px 0 0;
+}
+.calls-stack:has(i) {
+  min-height: 2px;
+}
+.calls-x {
+  display: flex;
+  justify-content: space-between;
+  margin: -8px 0 0 20px;
+  font-size: 10px;
+}
+.calls-inspector,
+.calls-quiet {
+  background: var(--mantine-color-default-hover);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.calls-inspector {
+  justify-content: space-between;
+}
+.calls-bin-head strong {
+  font-size: 13px;
+}
+.calls-bin-values {
+  font-size: 12px;
+  gap: 9px;
+}
+.calls-bin-values span {
+  gap: 4px;
+}
+.calls-shift {
+  gap: 2px;
+  flex-wrap: nowrap;
+}
+.calls-shift button {
+  display: grid;
+  place-items: center;
+  color: inherit;
+  background: var(--mantine-color-default);
+  border: 1px solid var(--ov-border);
+  border-radius: 5px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+}
+.calls-shift button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.calls-report p {
+  margin: 0;
+}
+.calls-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--mantine-color-teal-light);
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.calls-log-target {
+  min-width: 0;
+  scroll-margin-top: 70px;
+}
+@media (max-width: 600px) {
+  .calls-chart-key {
+    align-items: flex-start;
+  }
+  .calls-inspector {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .calls-shift button {
+    width: 36px;
+    height: 36px;
+  }
+  .calls-stats {
+    gap: 12px;
+  }
+  .calls-stats > div {
+    flex: 1 1 auto;
+  }
+  .calls-report {
+    gap: 10px;
+  }
+  .calls-report .calls-x span:nth-child(2) {
+    display: none;
+  }
+}

@@ -1,0 +1,154 @@
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+/* A quiet network-ish glow behind the content; nothing moves, nothing
+   competes with the data. */
+[data-mantine-color-scheme="dark"] body {
+  background-image:
+    radial-gradient(900px 480px at 84% -12%, rgba(32, 201, 178, 0.1), transparent 65%),
+    radial-gradient(720px 420px at -5% 0%, rgba(94, 124, 255, 0.08), transparent 62%);
+  background-attachment: fixed;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.86em;
+}
+
+.page-heading { padding-block: .35rem .65rem; border-bottom: 1px solid var(--mantine-color-default-border); }
+.nav-section { padding: .8rem .75rem .3rem; color: var(--mantine-color-dimmed); font-size: .64rem; font-weight: 650; letter-spacing: .09em; text-transform: uppercase; }
+.nav-destination { text-decoration: none; }
+.nav-destination:hover { background: var(--mantine-color-default-hover); }
+.nav-destination[aria-current="page"] { box-shadow: inset 2px 0 var(--mantine-color-teal-6); }
+.copy-id { display: inline-flex; align-items: center; gap: .35rem; appearance: none; border: 0; padding: 0; min-width: 0; background: none; color: inherit; cursor: pointer; }
+.copy-id:focus-visible, .nav-destination:focus-visible, .request-open:focus-visible { outline: 2px solid var(--mantine-color-teal-5); outline-offset: 1px; }
+.request-open { font: inherit; border: 0; padding: .2rem 0; background: none; color: var(--mantine-color-anchor); text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+.event-detail summary { cursor: pointer; font-size: .78rem; overflow-wrap: anywhere; }
+.event-detail pre { margin: .35rem 0; padding: .55rem; border-radius: .3rem; background: var(--mantine-color-default-hover); white-space: pre-wrap; overflow-wrap: anywhere; font-size: .72rem; }
+
+/* Status dots: one shape, colour carries the meaning. */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--mantine-color-gray-6);
+}
+
+.dot[data-tone="ok"] {
+  background: var(--mantine-color-teal-5);
+  box-shadow: 0 0 0 3px rgba(32, 201, 178, 0.16);
+}
+
+.dot[data-tone="warn"] {
+  background: var(--mantine-color-yellow-5);
+  box-shadow: 0 0 0 3px rgba(250, 176, 5, 0.16);
+}
+
+.dot[data-tone="bad"] {
+  background: var(--mantine-color-red-5);
+  box-shadow: 0 0 0 3px rgba(250, 82, 82, 0.16);
+}
+
+.dot[data-tone="ok"][data-live="true"] {
+  animation: dot-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(32, 201, 178, 0.16);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(32, 201, 178, 0.04);
+  }
+}
+
+/* Table rows that open a detail view. */
+.rowlink tbody tr {
+  cursor: pointer;
+}
+
+.rowlink tbody tr[data-failed="true"] td {
+  background: light-dark(rgba(250, 82, 82, 0.045), rgba(250, 82, 82, 0.07));
+}
+
+/* Numbers line up in the header summary. */
+.stat-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Long ids wrap instead of pushing the layout. */
+.wrap-anywhere {
+  overflow-wrap: anywhere;
+}
+
+/* Inline model ids open a researched card. Only the text is the hover
+   target, so table rows stay clickable and truncation keeps working. */
+.model-hover-target {
+  display: inline-block;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: middle;
+  cursor: help;
+  border-bottom: 1px dotted transparent;
+  border-radius: 2px;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.model-hover-block {
+  display: block;
+  width: 100%;
+}
+
+.model-hover-target:hover,
+.model-hover-target:focus-visible {
+  border-bottom-color: var(--mantine-color-teal-5);
+  color: var(--mantine-color-teal-5);
+  outline: none;
+}
+
+/* Wiki model tiles: a dense, balanced grid that reacts to the pointer. */
+.wiki-tile {
+  cursor: pointer;
+  min-width: 0;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.wiki-tile:hover,
+.wiki-tile:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--mantine-color-teal-6);
+  box-shadow: 0 8px 24px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.28));
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot[data-live="true"] { animation: none; }
+  .wiki-tile, .model-hover-target { transition: none; }
+  .wiki-tile:hover, .wiki-tile:focus-visible { transform: none; }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: light-dark(rgba(0, 0, 0, 0.18), rgba(255, 255, 255, 0.14));
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

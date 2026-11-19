@@ -1,0 +1,175 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: rustup default stable
+      - run: npm ci
+        working-directory: web
+      - run: npm run check
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+        env:
+          LLM_ROUTER_SKIP_WEB_BUILD: 1
+      - run: cargo test --locked
+        env:
+          LLM_ROUTER_SKIP_WEB_BUILD: 1
+
+  linux:
+    name: linux (${{ matrix.arch }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - arch: aarch64
+            target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+      CC_x86_64_unknown_linux_musl: musl-gcc
+      CC_aarch64_unknown_linux_musl: musl-gcc
+      CFLAGS_aarch64_unknown_linux_musl: -mno-outline-atomics
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: rustup default stable
+      - run: rustup target add ${{ matrix.target }}
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends musl-tools
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: cargo build --locked --release --target ${{ matrix.target }}
+        env:
+          LLM_ROUTER_SKIP_WEB_BUILD: 1
+      - name: Verify static binary
+        run: |
+          binary="target/${{ matrix.target }}/release/llm-router"
+          "$binary" 2>&1 | grep -q config.yaml
+          ! readelf -l "$binary" | grep -q INTERP
+          ! readelf -d "$binary" | grep -q NEEDED
+      - name: Package binary
+        run: |
+          stage="llm-router-linux-${{ matrix.arch }}"
+          mkdir "$stage"
+          install -m 755 "target/${{ matrix.target }}/release/llm-router" "$stage/llm-router"
+          cp config.example.yaml "$stage/"
+          tar -czf "$stage.tar.gz" "$stage"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llm-router-linux-${{ matrix.arch }}
+          path: llm-router-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+  macos:
+    name: macos (${{ matrix.arch }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-15-intel
+          - arch: aarch64
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: rustup default stable
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: cargo build --locked --release
+        env:
+          LLM_ROUTER_SKIP_WEB_BUILD: 1
+      - run: ./target/release/llm-router 2>&1 | grep -q config.yaml
+      - name: Package binary
+        run: |
+          stage="llm-router-macos-${{ matrix.arch }}"
+          mkdir "$stage"
+          install -m 755 target/release/llm-router "$stage/llm-router"
+          cp config.example.yaml "$stage/"
+          tar -czf "$stage.tar.gz" "$stage"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llm-router-macos-${{ matrix.arch }}
+          path: llm-router-macos-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+  openwrt:
+    name: openwrt (aarch64)
+    needs: test
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - run: make docker-openwrt
+      - name: Package binary
+        run: |
+          stage="llm-router-openwrt-aarch64"
+          mkdir "$stage"
+          install -m 755 dist/openwrt/llm-router-openwrt-aarch64 "$stage/llm-router"
+          cp config.example.yaml "$stage/"
+          tar -czf "$stage.tar.gz" "$stage"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llm-router-openwrt-aarch64
+          path: llm-router-openwrt-aarch64.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: [linux, macos, openwrt]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Create checksums
+        working-directory: release
+        run: sha256sum *.tar.gz > SHA256SUMS
+      - name: Publish GitHub release
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "llm-router $GITHUB_REF_NAME" \
+            --generate-notes \
+            ./*.tar.gz ./SHA256SUMS

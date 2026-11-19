@@ -1,0 +1,361 @@
+.diag-page {
+  --ov-muted: var(--mantine-color-dimmed);
+  --ov-accent: var(--mantine-color-teal-light-color);
+  --ov-border: var(--mantine-color-default-border);
+  display: grid;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.diag-page .page-heading {
+  margin-bottom: 0;
+}
+.diag-page .mantine-Paper-root {
+  border-radius: var(--mantine-radius-md);
+}
+.diag-page h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+.diag-page h2 svg {
+  color: var(--ov-accent);
+}
+.diag-page small,
+.diag-count,
+.diag-pager {
+  color: var(--ov-muted);
+  font-size: 12px;
+}
+.diag-page :is(summary, button, a):focus-visible {
+  outline: 2px solid var(--ov-accent);
+  outline-offset: 2px;
+}
+.diag-history-form {
+  container-type: inline-size;
+}
+.diag-time-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 14rem)) 1fr;
+  align-items: end;
+  gap: 8px 12px;
+  padding: 0 var(--mantine-spacing-sm) 14px;
+}
+.diag-time-range input { min-width: 0; max-width: 100%; }
+.diag-time-range small { color: var(--mantine-color-dimmed); line-height: 1.4; }
+.diag-time-error { margin: 0 var(--mantine-spacing-sm) 10px; color: var(--mantine-color-error); }
+@container (max-width: 640px) {
+  .diag-time-range { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .diag-time-range small { grid-column: 1 / -1; }
+}
+@container (max-width: 400px) {
+  .diag-time-range { grid-template-columns: minmax(0, 1fr); }
+}
+.diag-filter-fields {
+  padding: 0 var(--mantine-spacing-sm) 14px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px 12px;
+}
+.diag-controls,
+.diag-log-tools,
+.diag-pager {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.diag-filter-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-top: 1px solid var(--ov-border);
+  border-radius: 0 0 var(--mantine-radius-md) var(--mantine-radius-md);
+  background: var(--mantine-color-default-hover);
+  padding: 9px var(--mantine-spacing-sm);
+}
+.diag-page-size,
+.diag-filter-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.diag-page-size label {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--ov-muted);
+}
+.diag-page-size select {
+  width: 65px;
+}
+.diag-page-size select,
+.diag-filter-buttons button {
+  height: 34px;
+  border-radius: var(--mantine-radius-sm);
+}
+@container (max-width: 30rem) {
+  .diag-filter-footer {
+    align-items: end;
+  }
+  .diag-page-size {
+    flex-direction: column;
+    align-items: start;
+    gap: 3px;
+  }
+  .diag-page-size select,
+  .diag-filter-buttons button {
+    height: 40px;
+  }
+  .diag-filter-buttons {
+    gap: 6px;
+  }
+  .diag-filter-buttons button {
+    padding-inline: 10px;
+  }
+}
+@container (max-width: 20rem) {
+  .diag-filter-buttons .mantine-Button-section {
+    display: none;
+  }
+}
+.diag-log-tools,
+.diag-pager,
+.diag-controls {
+  padding: 9px 14px;
+}
+.diag-pager,
+.diag-log-tools {
+  justify-content: space-between;
+}
+.diag-pager {
+  border-top: 1px solid var(--ov-border);
+}
+.diag-log-tools > .mantine-TextInput-root {
+  flex: 0 1 265px;
+}
+.diag-log-tools .mantine-Badge-root {
+  max-width: 220px;
+}
+.diag-page .ov-source {
+  margin: 8px 12px;
+}
+.diag-page .ov-loading {
+  display: block;
+  padding: 12px;
+}
+.diag-empty {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 16px;
+}
+.diag-empty strong {
+  font-size: 14px;
+}
+.diag-empty span {
+  font-size: 13px;
+  color: var(--ov-muted);
+}
+.diag-call {
+  display: grid;
+  grid-template-columns: 74px minmax(115px, 2fr) minmax(80px, 0.9fr) minmax(
+      56px,
+      0.8fr
+    ) minmax(64px, 0.75fr) minmax(94px, 1fr) 14px;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--ov-border);
+  padding: 9px 14px;
+  cursor: pointer;
+}
+.diag-call > div {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  justify-items: start;
+}
+.diag-call :is(small, strong, span:not(.mantine-Badge-label)) {
+  max-width: 100%;
+}
+.diag-call strong,
+.diag-call span {
+  font-size: 13px;
+}
+.diag-call .mantine-Badge-label {
+  font-size: 10px;
+}
+.diag-call small {
+  font-size: 11px;
+}
+.diag-call .diag-route > *,
+.diag-call .diag-key > span {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.diag-call .diag-cost,
+.diag-call .diag-measure {
+  justify-items: end;
+  white-space: nowrap;
+}
+.diag-call-time button {
+  font-size: 13px;
+}
+.diag-call svg {
+  color: var(--ov-muted);
+}
+@media (hover: hover) {
+  .diag-call:hover {
+    background: var(--mantine-color-default-hover);
+  }
+}
+.diag-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(245px, 0.85fr);
+  align-items: start;
+  gap: 12px;
+}
+.diag-layout > aside {
+  min-width: 0;
+}
+.diag-event-controls {
+  align-items: end;
+  background: var(--mantine-color-default-hover);
+}
+.diag-count {
+  margin-inline-start: auto;
+}
+.diag-event {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 12px;
+  padding: 0 14px;
+}
+.diag-event time {
+  text-align: end;
+  padding-top: 16px;
+  font-size: 11px;
+  color: var(--ov-muted);
+}
+.diag-story {
+  border-inline-start: 1px solid var(--ov-border);
+  position: relative;
+  padding: 12px 0 12px 16px;
+  overflow-wrap: anywhere;
+}
+.diag-story::before {
+  content: "";
+  position: absolute;
+  top: 19px;
+  inset-inline-start: -4px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid var(--mantine-color-body);
+  border-radius: 50%;
+  background: var(--ov-muted);
+}
+.diag-story h3 {
+  margin: 5px 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.diag-story p {
+  margin: 0;
+  color: var(--ov-muted);
+  font-size: 13px;
+}
+.diag-story details {
+  margin-top: 5px;
+  color: var(--ov-muted);
+}
+.diag-day {
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ov-muted);
+  border-block: 1px solid var(--ov-border);
+}
+.diag-action,
+.diag-pool {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  color: var(--ov-accent);
+  font-size: 12px;
+  text-underline-offset: 3px;
+}
+.diag-ban {
+  border-top: 1px solid var(--ov-border);
+  padding: 12px 0;
+  overflow-wrap: anywhere;
+}
+.diag-ban:last-child {
+  padding-bottom: 0;
+}
+@media (max-width: 75em) {
+  .diag-filter-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 65em) {
+  .diag-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .diag-call {
+    grid-template-columns: 64px minmax(90px, 2fr) 84px minmax(
+        50px,
+        0.8fr
+      ) 64px 12px;
+  }
+  .diag-call .diag-cost {
+    display: none;
+  }
+}
+@media (max-width: 44em) {
+  .diag-filter-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .diag-call {
+    grid-template-columns: 55px minmax(0, 1fr) 68px;
+    padding: 9px;
+    gap: 7px;
+  }
+  .diag-call .diag-key,
+  .diag-call > svg {
+    display: none;
+  }
+  .diag-call .diag-measure {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    gap: 7px;
+    align-items: baseline;
+  }
+  .diag-call .diag-measure strong {
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .diag-call-time button {
+    font-size: 12px;
+  }
+  .diag-log-tools > .mantine-TextInput-root {
+    flex: 1 1 220px;
+  }
+  .diag-event {
+    grid-template-columns: 49px minmax(0, 1fr);
+    padding-inline: 9px;
+    gap: 7px;
+  }
+  .diag-story {
+    padding-inline-start: 10px;
+  }
+  .diag-event-controls > .mantine-NativeSelect-root {
+    flex: 1 1 105px;
+    min-width: 0;
+  }
+}
