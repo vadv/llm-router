@@ -6,26 +6,21 @@ import {
   Drawer,
   Group,
   Select,
-  Stack,
   Text,
   UnstyledButton,
 } from "@mantine/core";
 import { IconArrowUpRight, IconChartLine, IconRefresh } from "@tabler/icons-react";
 import { api, type Observation } from "../api";
-import {
-  balanceReading,
-  balanceRisk,
-  burnPerDay,
-  daysLeft,
-  readingGroups,
-} from "../components/balance-math";
-import { Chart } from "../components/chart";
+import { balanceReading, balanceRisk, readingGroups } from "../components/balance-math";
+import { numberOf, unitOf } from "../components/balance-text";
 import { ModelHoverCard } from "../components/model-card";
 import { ProviderLogo } from "../components/provider-logo";
 import { PageHeader, RelTime } from "../components/ui";
-import { compact, dateTime, money } from "../format";
+import { dateTime } from "../format";
 import { routeParam, usePoll } from "../hooks";
 import { looksLikeModelId } from "../model-key";
+import { LimitDetail } from "./limits";
+import { Drill } from "./overview-links";
 import "./balances.css";
 
 const FILTERS = ["All providers", "Low", "Exhausted"] as const;
@@ -36,13 +31,6 @@ const windowRank = (name: string) =>
 const id = (row: Observation) =>
   JSON.stringify([row.provider_id, row.resource, row.metric, row.unit, row.window]);
 const severity = (row: Observation) => ({ exhausted: 0, low: 1, ok: 2 })[balanceRisk(row)];
-function unitOf(row: Observation) {
-  if (row.metric === "ratio") return "%";
-  if (row.unit === "token" || row.unit === "request") return `${row.unit}s`;
-  return row.unit ?? (row.metric === "money" ? "" : row.metric);
-}
-const numberOf = (row: Observation, n: number) =>
-  row.metric === "money" || ["CNY", "USD"].includes(row.unit ?? "") ? money(n) : compact(n);
 
 export function BalancesPage() {
   const state = usePoll(api.observations, []);
@@ -176,7 +164,12 @@ export function BalancesPage() {
       <Drawer
         opened={!!current}
         onClose={() => setSelected(null)}
-        title="Balance history"
+        title={
+          <Group justify="space-between" gap="xs" wrap="nowrap" style={{ paddingRight: 12 }}>
+            <Text fw={600}>Balance history</Text>
+            <Drill href="#/limits">All limits</Drill>
+          </Group>
+        }
         position="right"
         size="md"
       >
@@ -198,7 +191,7 @@ export function BalancesPage() {
                 data={siblings}
               />
             )}
-            <History key={id(current)} row={current} />
+            <LimitDetail key={id(current)} row={current} />
           </>
         )}
       </Drawer>
@@ -408,96 +401,5 @@ function Reading({
         {row.resets_at_unix !== null && <span>Resets {dateTime(row.resets_at_unix)}</span>}
       </div>
     </div>
-  );
-}
-
-function History({ row }: { row: Observation }) {
-  const history = usePoll(
-    () =>
-      api.observationHistory({
-        providerId: row.provider_id,
-        resource: row.resource,
-        metric: row.metric,
-        unit: row.unit ?? "",
-        window: row.window ?? "",
-        limit: 500,
-      }),
-    [row.provider_id, row.resource, row.metric, row.unit, row.window],
-  );
-  const readings = history.data ?? [];
-  const reading = balanceReading(row);
-  const mode = reading.left !== null ? "left" : "used";
-  const exact = (reported: string | null, value: number | null) =>
-    value === null
-      ? "Not reported"
-      : `${row.metric !== "ratio" && reported !== null && reported.trim() && Number.isFinite(Number(reported)) ? reported : Number(value.toPrecision(12))} ${unitOf(row)}`.trim();
-  const points = readings.map((r) => ({
-    unix: r.observed_at_unix,
-    value: balanceReading(r)[mode],
-  }));
-  const burn = burnPerDay(row, readings);
-  const days = daysLeft(row, readings);
-  return (
-    <Stack gap="sm">
-      <div>
-        <Text className="wrap-anywhere" fw={600}>
-          {row.resource}
-        </Text>
-        <Text size="xs" c="dimmed">
-          {row.metric} · {unitOf(row)} {mode} · last seen {dateTime(row.observed_at_unix)}
-        </Text>
-      </div>
-      <dl className="balance-facts" aria-label="Latest reading">
-        <dt>Remaining</dt>
-        <dd>{exact(row.remaining, reading.left)}</dd>
-        <dt>Used</dt>
-        <dd>{exact(row.usage, reading.used)}</dd>
-        <dt>Limit</dt>
-        <dd>{exact(row.limit, reading.limit)}</dd>
-        {row.resets_at_unix !== null && (
-          <>
-            <dt>Resets</dt>
-            <dd>{dateTime(row.resets_at_unix)}</dd>
-          </>
-        )}
-      </dl>
-      {history.error && (
-        <Alert color="red" title="Could not refresh history">
-          {history.error}
-        </Alert>
-      )}
-      {!history.data ? (
-        !history.error && (
-          <Text size="sm" role="status">
-            Loading readings…
-          </Text>
-        )
-      ) : points.filter((p) => p.value !== null).length < 2 ? (
-        <Text size="sm" c="dimmed">
-          Two measured readings are needed to draw a trend.
-        </Text>
-      ) : (
-        <Chart
-          height={160}
-          legend={false}
-          zeroBased={row.metric === "ratio"}
-          format={(v) => numberOf(row, v)}
-          series={[
-            { label: `${unitOf(row)} ${mode}`, points, color: "var(--mantine-color-teal-5)" },
-          ]}
-          markers={row.resets_at_unix ? [{ unix: row.resets_at_unix, label: "reset" }] : []}
-        />
-      )}
-      {burn !== null && burn > 0 && (
-        <Alert
-          icon={<IconChartLine size={18} />}
-          color={days !== null && days < 7 ? "orange" : "teal"}
-          title="Estimated burn rate"
-        >
-          {numberOf(row, burn)} {unitOf(row)} per day
-          {days !== null && ` · about ${compact(days)} days left at this rate`}.
-        </Alert>
-      )}
-    </Stack>
   );
 }

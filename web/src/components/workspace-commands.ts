@@ -4,6 +4,7 @@ export const sections: Record<Route, string> = {
   overview: "Monitor",
   usage: "Monitor",
   balances: "Monitor",
+  limits: "Monitor",
   providers: "Routing",
   pools: "Routing",
   history: "Diagnostics",
@@ -35,6 +36,12 @@ export const shortcuts: { label: string; target: string; detail: string; keyword
       target: "#/history?period=1h",
       detail: "Requests · last hour",
       keywords: "volume frequency spikes activity calls",
+    },
+    {
+      label: "See whether limits will last",
+      target: "#/limits",
+      detail: "Limits · balances and quotas",
+      keywords: "quota balance exhaust reset enough last burn pace run out",
     },
     {
       label: "Check system health",
