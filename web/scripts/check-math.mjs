@@ -763,7 +763,7 @@ test("the verdict says what runs out first, the amount or the window", () => {
   const dayBefore = (left) =>
     observation({ remaining: String(left), observed_at_unix: now - DAY });
   const rate = [dayBefore(20), row]; // ten a day
-  const steady = { perDay: 10, hours: 24 };
+  const fresh = (over) => observation({ observed_at_unix: now, ...over });
 
   // A balance with no reset to wait for lasts a day.
   const balance = limitOutlook(row, rate, now);
@@ -801,13 +801,20 @@ test("the verdict says what runs out first, the amount or the window", () => {
   assert.ok(outlookRank(tight) < outlookRank(slow));
 
   // Empty, unreported, unread and untouched.
-  assert.deepEqual(limitOutlook(observation({ remaining: "0" }), rate, now), { kind: "exhausted", resetsAt: null });
-  assert.deepEqual(limitOutlook(observation({ limit: "10", usage: "10", remaining: null }), rate, now), {
+  assert.deepEqual(limitOutlook(fresh({ remaining: "0" }), rate, now), { kind: "exhausted", resetsAt: null });
+  assert.deepEqual(limitOutlook(fresh({ limit: "10", usage: "10", remaining: null }), rate, now), {
     kind: "exhausted",
     resetsAt: null,
   });
-  assert.deepEqual(limitOutlook(observation({ remaining: null, usage: "5" }), rate, now), { kind: "unknown", why: "amount", resetsAt: null });
-  assert.deepEqual(limitOutlook(row, [row], now), { kind: "unknown", why: "history", resetsAt: null });
+  assert.deepEqual(limitOutlook(fresh({ remaining: null, usage: "5" }), rate, now), { kind: "unknown", why: "amount", resetsAt: null });
+  assert.deepEqual(limitOutlook(row, [row], now), { kind: "unknown", why: "refill", resetsAt: null });
+  assert.deepEqual(limitOutlook(row, [], now), { kind: "unknown", why: "none", resetsAt: null });
+  // A reading the provider stopped sending is named as such, not as a fresh one.
+  assert.deepEqual(limitOutlook({ ...row, observed_at_unix: now - 2 * DAY }, rate, now), {
+    kind: "unknown",
+    why: "stale",
+    resetsAt: null,
+  });
   assert.deepEqual(limitOutlook(row, [dayBefore(10), row], now), { kind: "quiet", resetsAt: null, hours: 24 });
 
   // A reset that is already past is no reset to wait for.
@@ -831,7 +838,7 @@ test("the verdict says what runs out first, the amount or the window", () => {
 
   // Worst first: empty, short, running dry, tight, lasting, untouched, unknown.
   const ranks = [
-    limitOutlook(observation({ remaining: "0" }), rate, now),
+    limitOutlook(fresh({ remaining: "0" }), rate, now),
     short,
     balance,
     tight,

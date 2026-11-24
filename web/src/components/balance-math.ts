@@ -179,9 +179,14 @@ export function pace(row: Observation, history: Observation[]): Pace | null {
 export type Outlook =
   // Nothing left to spend.
   | { kind: "exhausted"; resetsAt: number | null }
-  // It cannot be judged: no amount is reported, or there is less than an
-  // hour of readings since the last refill.
-  | { kind: "unknown"; why: "amount" | "history"; resetsAt: number | null }
+  // It cannot be judged: no amount is reported; the last reading is more
+  // than a day old; no reading of the last day names an amount; or there is
+  // less than an hour of readings since the last refill.
+  | {
+      kind: "unknown";
+      why: "amount" | "stale" | "none" | "refill";
+      resetsAt: number | null;
+    }
   // Nothing was spent over the measured hours.
   | { kind: "quiet"; resetsAt: number | null; hours: number }
   // At this pace it is empty before the reset. `shortfall` is what would
@@ -200,6 +205,10 @@ export type Outlook =
 
 const DAY = 86_400;
 
+/// How far back the pace of a reading is measured: the pace of the last
+/// day, and a reading older than that is one the provider stopped sending.
+export const LAST_DAY = 26 * 3600;
+
 export function limitOutlook(
   row: Observation,
   history: Observation[],
@@ -210,10 +219,18 @@ export function limitOutlook(
     row.resets_at_unix !== null && row.resets_at_unix > now
       ? row.resets_at_unix
       : null;
+  // A reading the provider stopped sending says nothing about now, whatever
+  // its amounts: it is named as stale before anything is read of it.
+  if (now - row.observed_at_unix > LAST_DAY) {
+    return { kind: "unknown", why: "stale", resetsAt };
+  }
   if (left === null) return { kind: "unknown", why: "amount", resetsAt };
   if (left <= 0 || percentLeft === 0) return { kind: "exhausted", resetsAt };
   const rate = pace(row, history);
-  if (rate === null) return { kind: "unknown", why: "history", resetsAt };
+  if (rate === null) {
+    const why = history.some((point) => balanceReading(point).left !== null) ? "refill" : "none";
+    return { kind: "unknown", why, resetsAt };
+  }
   if (rate.perDay <= 0) {
     return { kind: "quiet", resetsAt, hours: rate.hours };
   }

@@ -3,6 +3,7 @@ import { Text } from "@mantine/core";
 import { IconChevronDown } from "@tabler/icons-react";
 import { api, type Observation } from "../api";
 import {
+  LAST_DAY,
   TIGHT_SPARE,
   balanceReading,
   limitOutlook,
@@ -23,8 +24,6 @@ import "./limits.css";
 
 const HOUR = 3600;
 const DAY = 86_400;
-/// The pace is the pace of the last day, in a row and in its detail alike.
-const MEASURED = 26 * HOUR;
 const RECENT_POINTS = 150;
 /// The windows a provider names by length: the resets before the next one
 /// can be placed from it.
@@ -110,12 +109,16 @@ function verdict(
     case "exhausted":
       return { lead: "Nothing left", detail: reset || "No reset is reported" };
     case "unknown":
-      return outlook.why === "amount"
-        ? { lead: "No amount reported", detail: "The connection does not say how much is left." }
-        : {
-            lead: "Too early to tell",
-            detail: "An hour of readings since the last refill is needed for a pace.",
-          };
+      switch (outlook.why) {
+        case "amount":
+          return { lead: "No amount reported", detail: "The connection does not say how much is left." };
+        case "stale":
+          return { lead: "No reading for over a day", detail: `Last seen ${dateTime(row.observed_at_unix)}` };
+        case "none":
+          return { lead: "No readings to measure", detail: "No reading of the last day names an amount." };
+        case "refill":
+          return { lead: "Too early to tell", detail: "Less than an hour of readings since the last refill." };
+      }
     case "quiet":
       return {
         lead: "Nothing spent",
@@ -163,7 +166,7 @@ function useHistories(groups: Observation[][]) {
           groups.map((group) =>
             api.observationHistory({
               ...historyQuery(group[0]),
-              sinceUnix: Math.floor(Date.now() / 1000) - MEASURED,
+              sinceUnix: Math.floor(Date.now() / 1000) - LAST_DAY,
               limit: RECENT_POINTS,
             }),
           ),
@@ -406,7 +409,7 @@ export function LimitDetail({
   );
   // The chart shows all it can; the verdict is read from the last day.
   const readings = history.data ?? [];
-  const recent = given ?? readings.filter((r) => r.observed_at_unix >= now - MEASURED);
+  const recent = given ?? readings.filter((r) => r.observed_at_unix >= now - LAST_DAY);
   const outlook = limitOutlook(row, recent, now);
   const { left, used, limit } = balanceReading(row);
   const { lead, detail } = verdict(row, outlook, now);
