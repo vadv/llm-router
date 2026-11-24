@@ -1,7 +1,7 @@
 // Shared client behaviour: the refresh cadence, polling resources, the hash
 // router, and a one-second clock for relative times.
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { ApiError } from "./api";
 
 // ---- Refresh cadence: one control in the header, used by every page. ----
@@ -13,8 +13,12 @@ let cadence = readStoredCadence();
 const cadenceListeners = new Set<() => void>();
 
 function readStoredCadence(): number {
-  const stored = Number(localStorage.getItem(CADENCE_STORAGE));
-  return (CADENCES as readonly number[]).includes(stored) ? stored : 10_000;
+  // A missing entry is "never chosen", which is the default, not "off":
+  // Number(null) is 0.
+  const stored = localStorage.getItem(CADENCE_STORAGE);
+  return stored !== null && (CADENCES as readonly number[]).includes(Number(stored))
+    ? Number(stored)
+    : 10_000;
 }
 
 export function setCadence(next: number) {
@@ -37,6 +41,8 @@ export function useCadence(): number {
 export type Resource<T> = {
   data: T | undefined;
   error: string | null;
+  /// HTTP status of the failed read, when the core answered with one.
+  errorStatus: number | null;
   loading: boolean;
   updatedAt: number | null;
   reload: () => void;
@@ -49,9 +55,10 @@ export function usePoll<T>(load: () => Promise<T>, deps: unknown[] = [], poll = 
   const [state, setState] = useState<{
     data: T | undefined;
     error: string | null;
+    errorStatus: number | null;
     loading: boolean;
     updatedAt: number | null;
-  }>({ data: undefined, error: null, loading: true, updatedAt: null });
+  }>({ data: undefined, error: null, errorStatus: null, loading: true, updatedAt: null });
   const generation = useRef(0);
   // The loader closes over page-local state; deps decide when it changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -62,7 +69,7 @@ export function usePoll<T>(load: () => Promise<T>, deps: unknown[] = [], poll = 
     try {
       const data = await run();
       if (generation.current === ticket) {
-        setState({ data, error: null, loading: false, updatedAt: Date.now() });
+        setState({ data, error: null, errorStatus: null, loading: false, updatedAt: Date.now() });
       }
     } catch (error) {
       if (generation.current === ticket) {
@@ -70,6 +77,7 @@ export function usePoll<T>(load: () => Promise<T>, deps: unknown[] = [], poll = 
           ...previous,
           loading: false,
           error: error instanceof ApiError ? error.message : String(error),
+          errorStatus: error instanceof ApiError ? error.status : null,
         }));
       }
     }
@@ -98,6 +106,22 @@ export function useNow(stepMs = 1000): number {
     return () => window.clearInterval(timer);
   }, [stepMs]);
   return now;
+}
+
+/// True while the element holds more than it shows, as a list kept on one
+/// line does once its column narrows.
+export function useClipped(ref: RefObject<HTMLElement | null>): boolean {
+  const [clipped, setClipped] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const check = () => setClipped(element.scrollWidth > element.clientWidth + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return clipped;
 }
 
 // ---- Hash router: one URL per tab, browser back/forward keeps working. ----

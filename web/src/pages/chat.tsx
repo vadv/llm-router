@@ -11,7 +11,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import {
   IconArrowDown,
   IconArrowUp,
-  IconArrowUpRight,
+  IconArrowRight,
   IconBooks,
   IconChartBar,
   IconDatabase,
@@ -21,8 +21,9 @@ import {
   IconMessages,
   IconPlus,
   IconRoute,
+  IconSparkles,
 } from "@tabler/icons-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { api } from "../api";
 import { usePoll } from "../hooks";
 import { ChatComposer } from "../chat/composer";
@@ -36,23 +37,37 @@ import { useConversation } from "../chat/use-conversation";
 import "../chat/chat.css";
 import "../chat/workspace.css";
 
+// First prompts, shown until the conversation has a message. Each fills the
+// composer; nothing is sent until the person presses Enter. The row shows
+// the short `hint`; the prompt itself waits in the tooltip.
 const starters = [
   {
-    icon: IconChartBar,
-    title: "Usage summary",
-    text: "Summarize router usage over the last 24 hours. Which pool handled the most traffic?",
+    icon: IconRoute,
+    title: "Review my pools",
+    hint: "Each pool's fallback order, and where it is weakest",
+    text: "List my model pools and explain their fallback order. Which pool has the weakest fallback, and why? Do not change any settings.",
   },
   {
-    icon: IconRoute,
-    title: "Inspect a pool",
-    text: "List my model pools and explain their fallback order. Do not change any settings.",
+    icon: IconChartBar,
+    title: "Summarize today's usage",
+    hint: "Tokens and cost by pool and model over the last 24 hours",
+    text: "Summarize router usage over the last 24 hours. Which pool and which model handled the most tokens, and what did they cost?",
   },
   {
     icon: IconBooks,
-    title: "Research a topic",
-    text: "Help me research a topic using public sources: ",
+    title: "Find failures",
+    hint: "Yesterday's failed requests, their causes, what to change",
+    text: "Look at the requests from the last 24 hours that failed. What caused each failure, and which model or connection should I change?",
+  },
+  {
+    icon: IconSparkles,
+    title: "Pick a model for a task",
+    hint: "Compare models on price and benchmarks for one job",
+    text: "I need a model that reads UI screenshots and writes accurate CSS. Compare the models in my Model Wiki on price and benchmarks, then name the two best.",
   },
 ];
+
+const LAST_POOL = "llm-router.chat.pool";
 
 type Dialog =
   | { type: "new" | "clear" }
@@ -62,6 +77,17 @@ export function ChatPage() {
   const pools = usePoll(api.pools, []);
   const [pool, setPool] = useState<string | null>(null);
   const chat = useConversation(pool, setPool);
+  // A new conversation is ready to send: the pool used last, else the first
+  // one. A saved conversation names its own pool when it opens.
+  useEffect(() => {
+    if (!pools.data || pool !== null || chat.conversationId) return;
+    const last = localStorage.getItem(LAST_POOL);
+    const pick = (pools.data.find((p) => p.name === last) ?? pools.data[0])?.name;
+    if (pick) setPool(pick);
+  }, [pools.data, pool, chat.conversationId]);
+  useEffect(() => {
+    if (pool !== null) localStorage.setItem(LAST_POOL, pool);
+  }, [pool]);
   const [sample, setSample] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [railHidden, setRailHidden] = useState(false);
@@ -234,10 +260,7 @@ export function ChatPage() {
             <IconLayoutSidebar size={18} />
           </ActionIcon>
           <div className="thread-heading">
-            <small className="thread-kicker">
-              CHAT <b>/</b> {sample ? "EXAMPLE" : "CONVERSATION"}
-            </small>
-            <h1 title={title}>{title}</h1>
+            <h1 title={title}>{sample && title !== "Example conversation" ? `Example: ${title}` : title}</h1>
           </div>
           <div className="thread-head-actions">
             <ActionIcon
@@ -321,31 +344,29 @@ export function ChatPage() {
               />
             ) : (
               <div className="thread-welcome">
-                <span className="thread-emblem" aria-hidden="true">
-                  <IconMessages size={28} />
-                </span>
-                <div className="thread-kicker">MODEL POOLS</div>
-                <h2>
-                  Chat with a
-                  <br />
-                  <em>model pool</em>
-                </h2>
+                <h2>What should the pool do?</h2>
                 <p>
-                  Choose a pool below. The model can use router data, memory,
-                  and web search.
+                  Pick a pool below, or start from one of these. The model can
+                  read the router's own data and search the web.
                 </p>
                 <div className="thread-starters">
-                  {starters.map(({ icon: Icon, title: label, text }) => (
+                  {starters.map(({ icon: Icon, title: label, hint, text }) => (
                     <button
                       key={label}
+                      title={text}
                       onClick={() => {
                         editDraft(text);
                         inputRef.current?.focus();
                       }}
                     >
-                      <Icon size={17} />
-                      <span>{label}</span>
-                      <IconArrowUpRight size={13} />
+                      <span className="thread-starter-icon" aria-hidden>
+                        <Icon size={16} />
+                      </span>
+                      <span className="thread-starter-text">
+                        <strong>{label}</strong>
+                        <small>{hint}</small>
+                      </span>
+                      <IconArrowRight className="thread-starter-go" size={15} />
                     </button>
                   ))}
                 </div>

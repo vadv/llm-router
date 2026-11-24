@@ -367,6 +367,7 @@ mod tests {
                 .unwrap(),
             ),
             knowledge_cfg: None,
+            research: Mutex::new(None),
         });
 
         refresh_observations(&state).await;
@@ -476,6 +477,7 @@ mod tests {
                 .unwrap(),
             ),
             knowledge_cfg: None,
+            research: Mutex::new(None),
         })
     }
 
@@ -694,6 +696,7 @@ mod tests {
                 .unwrap(),
             ),
             knowledge_cfg: None,
+            research: Mutex::new(None),
         })
     }
 

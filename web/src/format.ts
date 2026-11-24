@@ -69,18 +69,59 @@ export function uptime(seconds: number): string {
   return `${days}d ${hours % 24}h`;
 }
 
+/// Time left to a job that keeps its pace. Nothing until a few units are
+/// done: after one, the figure swings too much to be worth reading.
+export function eta(
+  startedUnix: number | null | undefined,
+  done: number,
+  total: number,
+  nowUnix: number = Math.floor(Date.now() / 1000),
+): string | null {
+  if (!startedUnix || done < 5 || total <= done) return null;
+  const seconds = Math.round(((total - done) * Math.max(1, nowUnix - startedUnix)) / done);
+  return `about ${uptime(seconds)} left`;
+}
+
+const SCALES = ["", "K", "M", "B", "T"];
+
+/// A count as short as it reads: "943K", "9.43B", never "9426.5M".
 export function compact(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   const abs = Math.abs(value);
-  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (abs >= 10_000) return `${(value / 1000).toFixed(1)}K`;
-  if (abs >= 1000) return `${(value / 1000).toFixed(2)}K`;
-  if (abs >= 1) return value.toFixed(2).replace(/\.?0+$/, "");
-  return value.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  if (abs < 1000) {
+    if (abs >= 1) return value.toFixed(2).replace(/\.?0+$/, "");
+    return value.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  }
+  let scale = 0;
+  while (abs >= 1000 ** (scale + 1) && scale < SCALES.length - 1) scale += 1;
+  // Three digits that matter, whatever the size: 943, 94.3, 9.43.
+  const scaled = value / 1000 ** scale;
+  const digits = Math.abs(scaled) >= 100 ? 0 : Math.abs(scaled) >= 10 ? 1 : 2;
+  const text = scaled.toFixed(digits);
+  // Only a fraction loses its zeros: "10M" must not become "1M".
+  return `${digits > 0 ? text.replace(/0+$/, "").replace(/\.$/, "") : text}${SCALES[scale]}`;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/// "Nov 13, 2025" from a day, "Nov 2025" from a month, "—" from nothing.
+export function dateLabel(date: string | null | undefined): string {
+  if (!date || !/^\d{4}-\d{2}(-\d{2})?$/.test(date)) return "—";
+  const [year, month, day] = date.split("-");
+  const name = MONTHS[Number(month) - 1];
+  return name ? `${name}${day ? ` ${Number(day)},` : ""} ${year}` : "—";
+}
+
+/// A score as the card wrote it: 92, 84.5, 0.039.
+export function scoreText(value: number): string {
+  if (Number.isInteger(value)) return value.toLocaleString("en-US");
+  return value.toFixed(Math.abs(value) < 1 ? 3 : Math.abs(value) < 10 ? 2 : 1);
 }
 
 export function contextWindow(tokens: number | null | undefined): string {
   if (!tokens) return "unknown";
+  // 1,048,576 reads "1M", 262,144 reads "262K": two digits, no false precision.
+  if (tokens >= 999_500) return `${(tokens / 1_000_000).toFixed(2).replace(/\.?0+$/, "")}M`;
   if (tokens >= 1000) return `${Math.round(tokens / 1000)}K`;
   return String(tokens);
 }

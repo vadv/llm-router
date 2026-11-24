@@ -5,6 +5,7 @@ import {
   IconArrowsExchange,
   IconCalendar,
   IconChartBar,
+  IconDownload,
 } from "@tabler/icons-react";
 import {
   api,
@@ -38,6 +39,29 @@ import { stamp, UsageActivity } from "./usage-activity";
 import "./usage.css";
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const ROLLING = [
+  { label: "1h", hours: 1 },
+  { label: "24h", hours: 24 },
+  { label: "7d", hours: 168 },
+  { label: "30d", hours: 720 },
+];
+
+/// Token counts read short in the summary; the exact count is one hover away.
+function big(value: number | null) {
+  return value !== null && value >= 100_000 ? compact(value) : number(value);
+}
+
+/// Offer a file to download. Used for the CSV export.
+function download(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 const dimensions: Record<UsageGroupBy, string> = {
   provider: "Provider",
   family: "Model across providers",
@@ -81,13 +105,21 @@ function RangePicker({
   const [from, setFrom] = useState(localInput(range.from)),
     [to, setTo] = useState(localInput(range.to)),
     [error, setError] = useState("");
-  const preset = (yesterday: boolean) => {
-    const r = calendarDay(yesterday);
+  const show = (r: Window) => {
     setFrom(localInput(r.from));
     setTo(localInput(r.to));
     setError("");
     apply(r);
   };
+  const preset = (yesterday: boolean) => show(calendarDay(yesterday));
+  // A rolling window ends on the current minute.
+  const rolling = (hours: number) => {
+    const to = Math.ceil(Date.now() / 60000) * 60;
+    show({ from: to - hours * 3600, to });
+  };
+  const active = ROLLING.find(
+    ({ hours }) => range.to - range.from === hours * 3600 && range.to === Math.ceil(Date.now() / 60000) * 60,
+  )?.label;
   return (
     <form
       className="ux-range"
@@ -115,6 +147,7 @@ function RangePicker({
         label="From"
         type="datetime-local"
         required
+        withAsterisk={false}
         value={from}
         onChange={(e) => setFrom(e.currentTarget.value)}
       />
@@ -123,13 +156,25 @@ function RangePicker({
         label="Until"
         type="datetime-local"
         required
+        withAsterisk={false}
         value={to}
         onChange={(e) => setTo(e.currentTarget.value)}
       />
       <Button type="submit" size="xs" variant="light">
         Apply range
       </Button>
-      <div className="ux-shortcuts">
+      <div className="ux-shortcuts" role="group" aria-label="Quick ranges">
+        {ROLLING.map(({ label, hours }) => (
+          <button
+            type="button"
+            key={label}
+            data-active={active === label || undefined}
+            onClick={() => rolling(hours)}
+          >
+            {label}
+          </button>
+        ))}
+        <i className="ux-shortcuts-sep" aria-hidden />
         <button type="button" onClick={() => preset(true)}>
           Yesterday
         </button>
@@ -138,7 +183,7 @@ function RangePicker({
         </button>
       </div>
       <small>
-        <IconCalendar size={14} /> {zone} · end time excluded
+        <IconCalendar size={14} /> {zone}
       </small>
       {error && <div role="alert">{error}</div>}
     </form>
@@ -523,15 +568,17 @@ function Report({
         <span className="ux-caption">
           {incompleteTokens ? "Known token volume" : "Token volume"}
         </span>
-        <h2>{number(knownTokens(stats.input_tokens, stats.output_tokens))}</h2>
+        <h2 title={stats.input_tokens === null ? undefined : number(knownTokens(stats.input_tokens, stats.output_tokens))}>
+          {big(knownTokens(stats.input_tokens, stats.output_tokens))}
+        </h2>
       </div>
       <div>
         <span className="ux-caption">Input tokens</span>
-        <strong>{number(stats.input_tokens)}</strong>
+        <strong title={stats.input_tokens === null ? undefined : number(stats.input_tokens)}>{big(stats.input_tokens)}</strong>
       </div>
       <div>
         <span className="ux-caption">Output tokens</span>
-        <strong>{number(stats.output_tokens)}</strong>
+        <strong title={stats.output_tokens === null ? undefined : number(stats.output_tokens)}>{big(stats.output_tokens)}</strong>
       </div>
     </>
   );
@@ -775,6 +822,31 @@ function Breakdown({
     .map(perMillion)
     .filter((n): n is number => n !== null);
   const lowest = compare && rates.length >= 2 ? Math.min(...rates) : null;
+  // The table as it stands, with exact numbers instead of rounded text.
+  const exportCsv = () => {
+    const raw = (value: number | null) => (value === null ? "" : String(value));
+    const head = [
+      dimensions[group],
+      ...(tokenView
+        ? ["Total tokens"]
+        : ["Cost", "Cost per 1M", "Reported", "Estimated"]),
+      "Input",
+      "Output",
+    ];
+    const lines = filtered.map(([id, cell]) => [
+      id,
+      ...(tokenView
+        ? [raw(amount(cell, "tokens"))]
+        : [raw(amount(cell, "spend")), raw(perMillion(cell)), raw(amount(cell, "reported")), raw(amount(cell, "estimate"))]),
+      raw(cell.inputs ? cell.input : null),
+      raw(cell.outputs ? cell.output : null),
+    ]);
+    const csv = [head, ...lines]
+      .map((row) => row.map((value) => `"${value.replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    const stamp = new Date().toISOString().slice(0, 16);
+    download(new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" }), `usage-by-${group}-${stamp}.csv`);
+  };
   const col = (key: Column, label: string) => (
     <th
       key={key}
@@ -815,8 +887,20 @@ function Breakdown({
             setLimit(40);
           }}
           aria-label="Find a row"
-          placeholder="Find a row…"
+          placeholder="Find a row"
         />
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          color="gray"
+          className="ux-export"
+          leftSection={<IconDownload size={13} />}
+          disabled={!filtered.length}
+          onClick={exportCsv}
+          title="Download this table as CSV, exact numbers"
+        >
+          CSV
+        </Button>
       </div>
       <div
         className="ux-scroll"

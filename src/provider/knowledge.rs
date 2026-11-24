@@ -8,8 +8,9 @@
 use crate::provider::driver::{Driver, InferenceRequest, UpstreamResponse};
 use serde_json::{Map, Number, Value, json};
 
-/// Proven budget for one research call: enough for ~8 web searches.
-const MAX_TOKENS: u64 = 6_000;
+/// Proven budget for one research call: enough for ~10 web searches and
+/// a full card.
+const MAX_TOKENS: u64 = 8_000;
 
 #[derive(Debug)]
 pub struct CollectedCard {
@@ -29,18 +30,64 @@ impl std::fmt::Display for ResearchError {
 }
 impl std::error::Error for ResearchError {}
 
+// What a model takes in and gives out, as the dashboard spells them.
+const INPUT_MODALITIES: [&str; 5] = ["text", "image", "video", "audio", "pdf"];
+const OUTPUT_MODALITIES: [&str; 4] = ["text", "image", "audio", "video"];
+const REASONING: [&str; 3] = ["always", "optional", "none"];
+// What a model is for, in words a filter can match.
+const TAGS: [&str; 18] = [
+    "coding",
+    "agents",
+    "reasoning",
+    "math",
+    "vision",
+    "audio",
+    "long-context",
+    "fast",
+    "cheap",
+    "chat",
+    "writing",
+    "multilingual",
+    "embedding",
+    "image-generation",
+    "speech",
+    "open-weights",
+    "on-device",
+    "roleplay",
+];
+
+// Facts the Wiki compares across models are asked for as numbers and lists,
+// never as prose: a price is read, not parsed out of a sentence.
 const SCHEMA: &str = r#"{
-  "canonical_name": "official name or null",
-  "vendor": "string",
+  "canonical_name": "official model name or null",
+  "vendor": "canonical company name, e.g. \"Anthropic\", \"Alibaba Cloud\"",
   "release_date": "YYYY-MM-DD or null",
-  "description": "STRING, 3-4 sentences, no line breaks",
+  "snapshot": "the exact model version this id serves, when the id is an alias or a moving pointer; otherwise null",
+  "description": "STRING, 2-3 sentences, no line breaks: what the model is, what it is best at, where it falls short. Do not restate the numbers and lists below",
+  "tags": ["up to 6, only from: coding, agents, reasoning, math, vision, audio, long-context, fast, cheap, chat, writing, multilingual, embedding, image-generation, speech, open-weights, on-device, roleplay"],
   "use_cases": ["up to 6 short strings"],
-  "strengths": ["up to 6"],
-  "weaknesses": ["up to 6"],
-  "modality": "string",
-  "context_window": "number or null",
-  "pricing_hint": "STRING, 1 sentence, or null",
-  "ratings": [{"source": "string", "metric": "string", "value": 84.5, "as_of": "YYYY-MM", "note": "string or null"}],
+  "strengths": ["up to 6 short strings"],
+  "weaknesses": ["up to 6 short strings"],
+  "input_modalities": ["only from: text, image, video, audio, pdf"],
+  "output_modalities": ["only from: text, image, audio, video"],
+  "context_window": "number of tokens or null",
+  "max_output_tokens": "number of tokens or null",
+  "parameters": "e.g. \"397B total, 17B active\" or null",
+  "license": "e.g. \"Apache 2.0\", \"MIT\", \"proprietary\" or null",
+  "open_weights": "true, false or null",
+  "knowledge_cutoff": "YYYY-MM or null",
+  "reasoning": "\"always\" if the model always reasons, \"optional\" if the caller can switch reasoning on, \"none\", or null",
+  "tool_calling": "true, false or null",
+  "structured_output": "true, false or null",
+  "speed": {"output_tokens_per_second": "number or null", "time_to_first_token_seconds": "number or null", "source": "who measured", "as_of": "YYYY-MM or null"},
+  "pricing": {
+    "currency": "USD",
+    "input_per_1m": "number or null",
+    "cached_input_per_1m": "number or null",
+    "output_per_1m": "number or null",
+    "note": "one sentence on tiers, free tiers or promotions, or null"
+  },
+  "ratings": [{"source": "who published the number", "metric": "benchmark name exactly as its publisher writes it, without effort or tool conditions", "value": 84.5, "as_of": "YYYY-MM", "url": "url of the page that shows this number, or null", "note": "conditions such as the reasoning effort, or null"}],
   "family_line": "STRING 1-2 sentences or null",
   "sources": ["url"]
 }"#;
@@ -49,9 +96,13 @@ fn research_prompt(upstream_id: &str, catalog_provider: &str) -> String {
     format!(
         "Research the LLM model \"{id}\" (catalog entry of provider \"{prov}\"; \
 the id may be an alias — find the real model behind it). Use web search, \
-up to 8 queries. Answer with STRICT JSON matching this schema:\n{schema}\n\
-Hard rules: numbers and dates only from sources; unknown = null or []; every \
-rating needs a source and a month; up to 8 searches; output JSON only.",
+up to 10 queries. Answer with STRICT JSON matching this schema:\n{schema}\n\
+Hard rules: numbers and dates only from sources; unknown = null or []; \
+every rating needs a source and a month, and independent evaluations \
+(Artificial Analysis, LMArena, SWE-bench, Epoch AI) are preferred over the \
+vendor's own numbers; report up to 10 ratings; prices are the standard list \
+price per million tokens, zero only when it is really free; up to 10 \
+searches; output JSON only.",
         id = upstream_id,
         prov = catalog_provider,
         schema = SCHEMA
@@ -206,12 +257,275 @@ fn as_list(v: Option<&Value>, cap: usize) -> Vec<String> {
         .collect()
 }
 
+// How a model words a known value: "images", "vision" and "documents" are
+// read as the value they mean.
+const SYNONYMS: [(&str, &str); 12] = [
+    ("images", "image"),
+    ("vision", "image"),
+    ("visual", "image"),
+    ("speech", "audio"),
+    ("voice", "audio"),
+    ("audios", "audio"),
+    ("videos", "video"),
+    ("file", "pdf"),
+    ("files", "pdf"),
+    ("document", "pdf"),
+    ("documents", "pdf"),
+    ("text-only", "text"),
+];
+
+/// A list kept to its known values, lowercased and without repeats. "Text"
+/// and " images " are read; anything else is dropped and reported.
+fn as_enum_list(
+    v: Option<&Value>,
+    allowed: &[&str],
+    field: &str,
+    repairs: &mut Vec<String>,
+) -> Vec<String> {
+    let items: Vec<String> = match v {
+        Some(Value::String(s)) => s.split(',').map(str::to_string).collect(),
+        Some(Value::Array(items)) => items.iter().filter_map(|x| as_str(Some(x))).collect(),
+        _ => Vec::new(),
+    };
+    let mut out = Vec::new();
+    for item in items {
+        let spelled = item.trim().to_ascii_lowercase().replace(['_', ' '], "-");
+        let name = allowed
+            .contains(&spelled.as_str())
+            .then_some(spelled.clone())
+            .or_else(|| {
+                SYNONYMS
+                    .iter()
+                    .find(|(from, _)| *from == spelled)
+                    .map(|(_, to)| (*to).to_string())
+            })
+            .unwrap_or(spelled);
+        if allowed.contains(&name.as_str()) {
+            if !out.contains(&name) {
+                out.push(name);
+            }
+        } else if !name.is_empty() {
+            repairs.push(format!("{field}: unknown value '{name}' dropped"));
+        }
+    }
+    out
+}
+
+/// A list as a phrase: "text", "text and image", "text, image, and pdf".
+fn list_prose(items: &[String]) -> String {
+    match items.len() {
+        0 => String::new(),
+        1 => items[0].clone(),
+        2 => format!("{} and {}", items[0], items[1]),
+        n => format!("{}, and {}", items[..n - 1].join(", "), items[n - 1]),
+    }
+}
+
+/// `true`, `"yes"` and `1` are true; `false`, `"no"` and `0` are false.
+fn as_bool(v: Option<&Value>) -> Option<bool> {
+    match v {
+        Some(Value::Bool(b)) => Some(*b),
+        Some(Value::Number(n)) => n.as_f64().map(|x| x != 0.0),
+        Some(Value::String(s)) => match s.trim().to_ascii_lowercase().as_str() {
+            "true" | "yes" => Some(true),
+            "false" | "no" => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// One of a fixed set of words, however it is cased.
+fn as_choice(v: Option<&Value>, allowed: &[&str]) -> Option<String> {
+    let text = as_str(v)?;
+    allowed
+        .iter()
+        .find(|choice| **choice == text.trim().to_ascii_lowercase())
+        .map(|choice| (*choice).to_string())
+}
+
+/// A price that is a non-negative finite number, or nothing.
+fn as_price(v: Option<&Value>) -> Option<Number> {
+    as_num(v).filter(|n| n.as_f64().is_some_and(|x| x.is_finite() && x >= 0.0))
+}
+
+/// A token count. 128000, "128,000 tokens" and "128K" are one number; a
+/// figure in a unit this does not know (billions) is nothing.
+fn as_token_count(v: Option<&Value>) -> Option<Number> {
+    let text = match v {
+        Some(Value::String(text)) => text,
+        other => return as_num(other),
+    };
+    let chars: Vec<char> = text.trim().chars().collect();
+    let start = chars.iter().position(|c| c.is_ascii_digit())?;
+    let mut end = start;
+    while end < chars.len()
+        && (chars[end].is_ascii_digit() || matches!(chars[end], '.' | ',' | ' '))
+    {
+        end += 1;
+    }
+    while end > start && chars[end - 1] == ' ' {
+        end -= 1;
+    }
+    let figure: String = chars[start..end].iter().filter(|c| **c != ',').collect();
+    let mut unit_at = end;
+    while unit_at < chars.len() && chars[unit_at] == ' ' {
+        unit_at += 1;
+    }
+    // One letter after the figure is a unit ("128K", "1 M"); a word is
+    // just a word ("256,000 tokens").
+    let scale = match chars.get(unit_at) {
+        Some(unit)
+            if unit.is_ascii_alphabetic()
+                && !chars
+                    .get(unit_at + 1)
+                    .is_some_and(char::is_ascii_alphabetic) =>
+        {
+            match unit {
+                'k' | 'K' => 1_000.0,
+                'm' | 'M' => 1_000_000.0,
+                _ => return None,
+            }
+        }
+        _ => 1.0,
+    };
+    figure
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|x| x.is_finite() && *x >= 0.0)
+        .map(|x| x * scale)
+        .and_then(|x| {
+            if x.fract() == 0.0 && x <= i64::MAX as f64 {
+                Number::from(x as i64).into()
+            } else {
+                Number::from_f64(x)
+            }
+        })
+}
+
+/// The pricing object: amounts as numbers, the currency as a code. Null
+/// when no amount arrived, so a reader never mistakes a missing price for
+/// a free one.
+fn as_pricing(card: &Value) -> Value {
+    let Some(Value::Object(pricing)) = card.get("pricing") else {
+        return Value::Null;
+    };
+    let input = as_price(pricing.get("input_per_1m"));
+    let cached = as_price(pricing.get("cached_input_per_1m"));
+    let output = as_price(pricing.get("output_per_1m"));
+    if input.is_none() && cached.is_none() && output.is_none() {
+        return Value::Null;
+    }
+    json!({
+        "currency": as_str(pricing.get("currency"))
+            .map(|c| c.trim().to_ascii_uppercase())
+            .filter(|c| c.len() == 3)
+            .unwrap_or("USD".into()),
+        "input_per_1m": input,
+        "cached_input_per_1m": cached,
+        "output_per_1m": output,
+        "note": as_str(pricing.get("note")),
+    })
+}
+
+/// The pricing object as the sentence older readers expect.
+fn pricing_prose(pricing: &Value) -> Option<String> {
+    let price = |key: &str| pricing.get(key).and_then(Value::as_f64);
+    let currency = pricing
+        .get("currency")
+        .and_then(Value::as_str)
+        .unwrap_or("USD");
+    // "$8", "$1.131", "$0.007", "$0.000035": the digits the card states.
+    let amount = |x: f64| {
+        let digits = if x < 0.001 {
+            6
+        } else if x < 0.01 {
+            5
+        } else {
+            3
+        };
+        let text = if x.fract() == 0.0 {
+            format!("{}", x as i64)
+        } else {
+            format!("{x:.digits$}")
+                .trim_end_matches('0')
+                .trim_end_matches('.')
+                .to_string()
+        };
+        if currency == "USD" {
+            format!("${text}")
+        } else {
+            format!("{currency} {text}")
+        }
+    };
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(x) = price("input_per_1m") {
+        parts.push(format!("{} per 1M input tokens", amount(x)));
+    }
+    if let Some(x) = price("cached_input_per_1m") {
+        parts.push(format!("{} per 1M cached input", amount(x)));
+    }
+    if let Some(x) = price("output_per_1m") {
+        parts.push(format!("{} per 1M output tokens", amount(x)));
+    }
+    let last = parts.pop()?;
+    let mut sentence = if parts.is_empty() {
+        last
+    } else {
+        format!("{} and {last}", parts.join(", "))
+    };
+    sentence.push('.');
+    if let Some(note) = pricing
+        .get("note")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|note| !note.is_empty())
+    {
+        sentence.push(' ');
+        sentence.push_str(note.trim_end_matches('.'));
+        sentence.push('.');
+    }
+    Some(sentence)
+}
+
+/// A month "YYYY-MM", or nothing.
+fn as_month(v: Option<&Value>) -> Option<String> {
+    as_str(v).filter(|s| s.len() == 7 && s.as_bytes()[4] == b'-')
+}
+
+/// A time to first token a person would wait for. A figure of minutes is
+/// a confusion with something else (a benchmark runtime, a latency score),
+/// and showing it would be a false fact.
+fn as_first_token(v: Option<&Value>) -> Option<Number> {
+    as_price(v).filter(|n| n.as_f64().is_some_and(|x| x > 0.0 && x < 120.0))
+}
+
+/// Measured speed: output tokens per second and time to first token, with
+/// who measured. Null when neither was measured.
+fn as_speed(v: Option<&Value>) -> Value {
+    let Some(Value::Object(speed)) = v else {
+        return Value::Null;
+    };
+    let tokens = as_price(speed.get("output_tokens_per_second"));
+    let first = as_first_token(speed.get("time_to_first_token_seconds"));
+    if tokens.is_none() && first.is_none() {
+        return Value::Null;
+    }
+    json!({
+        "output_tokens_per_second": tokens,
+        "time_to_first_token_seconds": first,
+        "source": as_str(speed.get("source")),
+        "as_of": as_month(speed.get("as_of")),
+    })
+}
+
 /// Coerce one card to the contract; record everything questionable.
 fn normalize(card: &Value, repairs: &mut Vec<String>) -> Value {
     let mut out = Map::new();
 
     fn as_date(card: &Value, repairs: &mut Vec<String>) -> Option<String> {
-        let v = as_str(card.get("release_date")).or_else(|| as_str(card.get("release_date")))?;
+        let v = as_str(card.get("release_date"))?;
         let parts: Vec<&str> = v.split('-').collect();
         if parts.len() == 3 && parts.iter().all(|p| !p.is_empty()) {
             return Some(v);
@@ -253,14 +567,79 @@ fn normalize(card: &Value, repairs: &mut Vec<String>) -> Value {
                 .collect(),
         ),
     );
-    out.insert("modality".into(), as_str(card.get("modality")).into());
+    let input = as_enum_list(
+        card.get("input_modalities"),
+        &INPUT_MODALITIES,
+        "input_modalities",
+        repairs,
+    );
+    let output = as_enum_list(
+        card.get("output_modalities"),
+        &OUTPUT_MODALITIES,
+        "output_modalities",
+        repairs,
+    );
+    // Readers that predate the lists get the same facts as a sentence.
+    let modality = (!input.is_empty() || !output.is_empty()).then(|| {
+        let prose = format!(
+            "{} input; {} output",
+            list_prose(&input),
+            list_prose(&output)
+        );
+        let mut chars = prose.chars();
+        match chars.next() {
+            Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+            None => String::new(),
+        }
+    });
+    let pricing = as_pricing(card);
+    let pricing_hint = pricing_prose(&pricing);
     out.insert(
-        "context_window".into(),
-        as_num(card.get("context_window")).into(),
+        "modality".into(),
+        as_str(card.get("modality")).or(modality).into(),
     );
     out.insert(
+        "context_window".into(),
+        as_token_count(card.get("context_window")).into(),
+    );
+    out.insert(
+        "max_output_tokens".into(),
+        as_token_count(card.get("max_output_tokens")).into(),
+    );
+    out.insert("parameters".into(), as_str(card.get("parameters")).into());
+    out.insert("license".into(), as_str(card.get("license")).into());
+    out.insert(
+        "open_weights".into(),
+        as_bool(card.get("open_weights")).into(),
+    );
+    out.insert(
+        "knowledge_cutoff".into(),
+        as_month(card.get("knowledge_cutoff")).into(),
+    );
+    out.insert(
+        "reasoning".into(),
+        as_choice(card.get("reasoning"), &REASONING).into(),
+    );
+    out.insert(
+        "tool_calling".into(),
+        as_bool(card.get("tool_calling")).into(),
+    );
+    out.insert(
+        "structured_output".into(),
+        as_bool(card.get("structured_output")).into(),
+    );
+    out.insert("snapshot".into(), as_str(card.get("snapshot")).into());
+    out.insert(
+        "tags".into(),
+        json!(as_enum_list(card.get("tags"), &TAGS, "tags", repairs)),
+    );
+    out.insert("speed".into(), as_speed(card.get("speed")));
+    out.insert("input_modalities".into(), json!(input));
+    out.insert("output_modalities".into(), json!(output));
+    out.insert("pricing".into(), pricing);
+    out.insert(
         "pricing_hint".into(),
-        as_str(card.get("pricing_hint")).into(),
+        as_str(card.get("pricing_hint")).or(pricing_hint).into(),
     );
 
     let mut ratings = Vec::new();
@@ -286,6 +665,7 @@ fn normalize(card: &Value, repairs: &mut Vec<String>) -> Value {
                 "metric": as_str(entry.get("metric")).or(Some("value".into())),
                 "value": value,
                 "as_of": as_of,
+                "url": as_str(entry.get("url")),
                 "note": as_str(entry.get("note")),
             }));
         }
@@ -465,17 +845,29 @@ mod tests {
         }
     }
 
+    // A real answer shape: fenced, with arrays where strings belong, numbers
+    // with units, and a rating that has no source.
     const GOOD_CARD: &str = r#"```json
 {"canonical_name": "GLM 5.3", "vendor": "Z.ai", "release_date": "2026-09-30",
  "description": ["General-purpose model.", "Strong at code."],
+ "snapshot": "GLM-5.3-20260930",
+ "tags": ["Coding", "agents", "holography", "coding"],
  "use_cases": ["coding", "agentic", "long context"],
  "strengths": "single string not array",
  "weaknesses": [],
- "modality": "text",
+ "input_modalities": ["Text", " images "],
+ "output_modalities": "text",
  "context_window": "256,000 tokens",
- "pricing_hint": null,
+ "max_output_tokens": "128K",
+ "license": "MIT",
+ "open_weights": "yes",
+ "knowledge_cutoff": "around March",
+ "reasoning": "Optional",
+ "tool_calling": false,
+ "speed": {"output_tokens_per_second": "84.5 tok/s", "time_to_first_token_seconds": 0.8, "source": "Artificial Analysis", "as_of": "2026-10"},
+ "pricing": {"currency": "usd", "input_per_1m": "$1.13", "cached_input_per_1m": null, "output_per_1m": -6, "note": "Free on OpenRouter's free endpoint."},
  "ratings": [
-   {"source": "Artificial Analysis", "metric": "Output speed", "value": "84.5 tok/s"},
+   {"source": "Artificial Analysis", "metric": "Output speed", "value": "84.5 tok/s", "url": "https://artificialanalysis.ai/models/glm-5-3"},
    {"source": "LMArena", "score": 1421, "as_of": "2026-10"},
    {"metric": "orphan without source", "value": 1}
  ],
@@ -502,7 +894,134 @@ mod tests {
         assert_eq!(v["ratings"].as_array().unwrap().len(), 2);
         assert_eq!(v["ratings"][0]["value"], json!(84.5));
         assert_eq!(v["ratings"][1]["value"], json!(1421));
+        assert_eq!(
+            v["ratings"][0]["url"],
+            "https://artificialanalysis.ai/models/glm-5-3"
+        );
         assert!(card.repairs.iter().any(|r| r.contains("dropped")));
+    }
+
+    #[tokio::test]
+    async fn structured_facts_are_numbers_and_known_words() {
+        let driver = QueueDriver::new(&[GOOD_CARD]);
+        let card = research_card(&driver, "deepseek-flash", "z-ai/glm-5.3", "zai")
+            .await
+            .unwrap();
+        let v: Value = serde_json::from_str(&card.card_json).unwrap();
+        // Tags: known words lowercased, repeats and unknown words dropped.
+        assert_eq!(v["tags"], json!(["coding", "agents"]));
+        assert!(card.repairs.iter().any(|r| r.contains("holography")));
+        // Modalities: "Text" and " images " are read, nothing else.
+        assert_eq!(v["input_modalities"], json!(["text", "image"]));
+        assert_eq!(v["output_modalities"], json!(["text"]));
+        // A negative price is not a price.
+        assert_eq!(v["pricing"]["input_per_1m"], json!(1.13));
+        assert!(v["pricing"]["output_per_1m"].is_null());
+        assert_eq!(v["pricing"]["currency"], "USD");
+        // "128K" is 128,000 tokens.
+        assert_eq!(v["max_output_tokens"], json!(128000));
+        assert_eq!(v["license"], "MIT");
+        assert_eq!(v["open_weights"], true);
+        assert_eq!(v["reasoning"], "optional");
+        assert_eq!(v["tool_calling"], false);
+        // A cutoff that is not a month is dropped, never guessed.
+        assert!(v["knowledge_cutoff"].is_null());
+        assert_eq!(v["snapshot"], "GLM-5.3-20260930");
+        assert_eq!(v["speed"]["output_tokens_per_second"], json!(84.5));
+        assert_eq!(v["speed"]["time_to_first_token_seconds"], json!(0.8));
+        assert_eq!(v["speed"]["source"], "Artificial Analysis");
+        assert_eq!(v["speed"]["as_of"], "2026-10");
+    }
+
+    #[test]
+    fn a_first_token_time_in_minutes_is_not_shown_as_one() {
+        let speed = |seconds: Value| {
+            as_speed(Some(&json!({
+                "output_tokens_per_second": 73,
+                "time_to_first_token_seconds": seconds,
+                "source": "Artificial Analysis",
+                "as_of": "2026-08",
+            })))
+        };
+        assert_eq!(speed(json!(1.2))["time_to_first_token_seconds"], json!(1.2));
+        // A reasoning model can make a person wait a minute and a half.
+        assert_eq!(
+            speed(json!(81.07))["time_to_first_token_seconds"],
+            json!(81.07)
+        );
+        assert!(speed(json!(810.7))["time_to_first_token_seconds"].is_null());
+        assert!(speed(json!(0.0))["time_to_first_token_seconds"].is_null());
+        // The tokens-per-second figure survives a bad time next to it.
+        assert_eq!(speed(json!(810.7))["output_tokens_per_second"], json!(73));
+    }
+
+    #[tokio::test]
+    async fn structured_facts_also_read_as_the_sentences_older_readers_expect() {
+        let driver = QueueDriver::new(&[GOOD_CARD]);
+        let card = research_card(&driver, "deepseek-flash", "z-ai/glm-5.3", "zai")
+            .await
+            .unwrap();
+        let v: Value = serde_json::from_str(&card.card_json).unwrap();
+        assert_eq!(v["modality"], "Text and image input; text output");
+        assert_eq!(
+            v["pricing_hint"],
+            "$1.13 per 1M input tokens. Free on OpenRouter's free endpoint."
+        );
+    }
+
+    #[test]
+    fn prose_sentences_keep_the_digits_the_card_states() {
+        let price = |json: Value| pricing_prose(&json).unwrap();
+        assert_eq!(
+            price(
+                json!({"currency": "USD", "input_per_1m": 8, "cached_input_per_1m": 0.8, "output_per_1m": 40})
+            ),
+            "$8 per 1M input tokens, $0.8 per 1M cached input and $40 per 1M output tokens."
+        );
+        assert_eq!(
+            price(json!({"currency": "USD", "input_per_1m": 1.131, "output_per_1m": 3.957})),
+            "$1.131 per 1M input tokens and $3.957 per 1M output tokens."
+        );
+        assert_eq!(
+            price(json!({"currency": "USD", "input_per_1m": 0.000035, "output_per_1m": 0.00007})),
+            "$0.000035 per 1M input tokens and $0.00007 per 1M output tokens."
+        );
+        assert_eq!(
+            price(json!({"currency": "CNY", "input_per_1m": 2, "output_per_1m": 10})),
+            "CNY 2 per 1M input tokens and CNY 10 per 1M output tokens."
+        );
+        // A card without amounts has no price sentence.
+        assert!(pricing_prose(&Value::Null).is_none());
+        assert!(pricing_prose(&json!({"currency": "USD", "note": "Subscription only"})).is_none());
+    }
+
+    #[test]
+    fn a_card_from_before_the_structured_fields_still_normalizes() {
+        let mut repairs = Vec::new();
+        let v = normalize(
+            &json!({"description": "d", "modality": "text", "pricing_hint": "$1 in, $2 out.", "sources": ["u"]}),
+            &mut repairs,
+        );
+        assert!(validate(&v).is_empty());
+        assert_eq!(v["modality"], "text");
+        assert_eq!(v["pricing_hint"], "$1 in, $2 out.");
+        for field in [
+            "pricing",
+            "speed",
+            "max_output_tokens",
+            "license",
+            "open_weights",
+            "knowledge_cutoff",
+            "reasoning",
+            "tool_calling",
+            "structured_output",
+            "snapshot",
+            "parameters",
+        ] {
+            assert!(v[field].is_null(), "{field} should be null, not invented");
+        }
+        assert_eq!(v["tags"], json!([]));
+        assert_eq!(v["input_modalities"], json!([]));
     }
 
     #[tokio::test]

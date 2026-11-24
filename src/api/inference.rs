@@ -641,6 +641,7 @@ mod tests {
                 .unwrap(),
             ),
             knowledge_cfg: None,
+            research: Mutex::new(None),
         })
     }
 
@@ -700,6 +701,7 @@ mod tests {
                 .unwrap(),
             ),
             knowledge_cfg: None,
+            research: Mutex::new(None),
         });
         let members = vec![
             ModelId::new(ProviderId::new("prov".to_string()), "m-a"),

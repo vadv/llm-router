@@ -1,20 +1,19 @@
 import { Badge, Button, Group, NativeSelect, Stack, Text } from "@mantine/core";
-import {
-  IconActivity,
-  IconArrowRight,
-  IconShieldPause,
-} from "@tabler/icons-react";
+import { IconArrowRight } from "@tabler/icons-react";
 import { useState } from "react";
 import { api, type EventRecord } from "../api";
-import { eventStory } from "../components/event-story";
+import { eventStory, foldCards, headOf, type FeedItem } from "../components/event-story";
 import { ModelHoverCard } from "../components/model-card";
 import { PageHeader, Panel, RelTime } from "../components/ui";
 import { clock, dateTime, EVENT_KIND_COLOR } from "../format";
-import { routeParam, useCadence, usePoll } from "../hooks";
+import { routeParam, usePoll } from "../hooks";
 import { Drill, drillUrl, SourceNote } from "./overview-links";
 import "./diagnostics.css";
 
 const FEED_SIZE = 100;
+// A research run writes one card after another. From this many in a row
+// they take one line, so the router's own events stay in sight.
+const FOLD_FROM = 4;
 const day = (t: number) =>
   new Date(t * 1000).toLocaleDateString(undefined, {
     weekday: "short",
@@ -24,7 +23,6 @@ const day = (t: number) =>
   });
 
 export function ActivityPage() {
-  const cadence = useCadence();
   const bans = usePoll(api.bans, []);
   const pools = usePoll(api.pools, []);
   const events = usePoll(() => api.events(FEED_SIZE), []);
@@ -35,6 +33,8 @@ export function ActivityPage() {
     (e) =>
       (!kind || e.kind === kind) && (!provider || e.provider_id === provider),
   );
+  const [unfolded, setUnfolded] = useState(false);
+  const blocks: FeedItem[] = unfolded ? rows.map((event) => ({ event })) : foldCards(rows, FOLD_FROM);
   const kinds = [
     ...new Set([kind, ...feed.map((e) => e.kind)].filter(Boolean)),
   ].sort();
@@ -49,29 +49,20 @@ export function ActivityPage() {
   };
   return (
     <div className="diag-page">
-      <div className="ov-eyebrow">Diagnostics / Changes</div>
       <PageHeader
         title="Router events"
-        description="What changed on the router, why it happened, and where to look next."
-        actions={<Drill href="#/history">Trace a request</Drill>}
+        description="What changed on the router, and where to look next."
+        actions={<Drill href="#/history">Requests</Drill>}
       />
       <div className="diag-layout">
         <Panel
           p={0}
-          title={
-            <h2>
-              <IconActivity size={17} /> Event timeline
-            </h2>
-          }
-          description={`Newest first · filters apply to the latest ${FEED_SIZE} recorded events.`}
+          title={<h2>Timeline</h2>}
+          description={`Newest first. Filters apply to the latest ${FEED_SIZE} events.`}
           actions={
             <Group gap="xs">
               <small>
-                {cadence
-                  ? `Refresh every ${cadence / 1000}s`
-                  : "Manual refresh"}
-                {events.updatedAt != null &&
-                  ` · checked ${clock(events.updatedAt / 1000)}`}
+                {events.updatedAt != null && `Checked ${clock(events.updatedAt / 1000)}`}
               </small>
               <Button
                 size="compact-xs"
@@ -130,23 +121,26 @@ export function ActivityPage() {
               </span>
             </div>
           )}
-          {rows.map((event, i) => (
-            <div key={event.id}>
-              {(i === 0 || day(event.ts_unix) !== day(rows[i - 1].ts_unix)) && (
-                <div className="diag-day">{day(event.ts_unix)}</div>
-              )}
-              <EventRow event={event} />
-            </div>
-          ))}
+          {blocks.map((block, i) => {
+            const event = headOf(block);
+            return (
+              <div key={"event" in block ? block.event.id : `run-${event.id}`}>
+                {(i === 0 || day(event.ts_unix) !== day(headOf(blocks[i - 1]).ts_unix)) && (
+                  <div className="diag-day">{day(event.ts_unix)}</div>
+                )}
+                {"cards" in block ? (
+                  <CardRun run={block.cards} onExpand={() => setUnfolded(true)} />
+                ) : (
+                  <EventRow event={block.event} />
+                )}
+              </div>
+            );
+          })}
         </Panel>
         <aside>
           <Panel
-            title={
-              <h2>
-                <IconShieldPause size={17} /> Active bans
-              </h2>
-            }
-            description="Current routing exclusions, independent of the event filters."
+            title={<h2>Active bans</h2>}
+            description="Models kept out of rotation right now."
           >
             <SourceNote source={bans} name="Active bans" />
             {bans.data?.length === 0 && (
@@ -221,6 +215,47 @@ export function ActivityPage() {
         </aside>
       </div>
     </div>
+  );
+}
+
+/// A run of card updates, as one line: how many, over what time, for which
+/// models. The full list is one click away.
+function CardRun({ run, onExpand }: { run: EventRecord[]; onExpand: () => void }) {
+  const newest = run[0];
+  const oldest = run.at(-1)!;
+  const models = [...new Set(run.map((event) => eventStory(event).model).filter(Boolean))];
+  return (
+    <article className="diag-event">
+      <time title={dateTime(newest.ts_unix)}>{clock(newest.ts_unix)}</time>
+      <div className="diag-story">
+        <Group gap={6}>
+          <Badge
+            size="xs"
+            tt="none"
+            variant="light"
+            color={EVENT_KIND_COLOR.knowledge_card ?? "gray"}
+          >
+            {run.length} wiki cards
+          </Badge>
+          <small>Router</small>
+        </Group>
+        <h3>
+          Model Wiki updated for {models.length} {models.length === 1 ? "model" : "models"}
+        </h3>
+        <p>
+          {clock(oldest.ts_unix)} – {clock(newest.ts_unix)} · {models.slice(0, 5).join(", ")}
+          {models.length > 5 ? ", …" : ""}
+        </p>
+        <Group gap="sm">
+          <a className="diag-action" href="#/wiki">
+            Model Wiki <IconArrowRight size={12} />
+          </a>
+          <button type="button" className="link-button" onClick={onExpand}>
+            Show all {run.length}
+          </button>
+        </Group>
+      </div>
+    </article>
   );
 }
 

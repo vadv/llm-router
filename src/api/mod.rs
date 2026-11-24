@@ -57,6 +57,10 @@ pub struct ApiState {
     /// Collector settings; None = the knowledge endpoints answer "not
     /// configured" instead of guessing a provider.
     pub(crate) knowledge_cfg: Option<crate::config::KnowledgeConfig>,
+    /// The last "research every card" job; it runs on its own task, so a
+    /// restart forgets it and the dashboard reads its progress without a lock
+    /// on the worker.
+    pub(crate) research: Mutex<Option<Arc<crate::research::ResearchProgress>>>,
     /// Balance observations; no driver reports any yet.
     pub(crate) balances: Mutex<crate::storage::balances::BalanceStore>,
     /// Last catalog-refresh outcome per connection; RAM only, restart resets.
@@ -166,6 +170,12 @@ pub fn routes(state: Arc<ApiState>) -> axum::Router {
         .route(
             "/v1/management/models/knowledge",
             get(management::get_model_knowledge).post(management::post_model_knowledge),
+        )
+        .route(
+            "/v1/management/models/knowledge/research",
+            get(management::get_model_research)
+                .post(management::post_model_research)
+                .delete(management::delete_model_research),
         )
         .route("/v1/management/events", get(management::list_events))
         .with_state(state)

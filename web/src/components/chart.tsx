@@ -35,7 +35,11 @@ export function Chart({
 }) {
   const [ref, rect] = useResizeObserver<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
-  const width = Math.max(200, Math.round(rect.width) || 600);
+  // The width is measured, never guessed: until the first reading arrives,
+  // only the height is reserved. A guessed width paints a chart too wide for
+  // a narrow screen, which then snaps into place a frame later.
+  if (rect.width < 1) return <Box ref={ref} h={height} />;
+  const width = Math.max(1, Math.round(rect.width));
   const built = frame(series, stacked, zeroBased);
   const { xs, values, totals, min, max } = built;
 

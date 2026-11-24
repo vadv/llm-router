@@ -1,0 +1,239 @@
+/* The model brief (hover preview) and the badges shared with the Wiki. */
+
+/* A vendor badge, coloured by vendor so the eye learns the mapping. */
+.vendor-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  max-width: 100%;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vendor-badge[data-color="orange"] {
+  background: var(--mantine-color-orange-light);
+  color: var(--mantine-color-orange-light-color);
+}
+.vendor-badge[data-color="teal"] {
+  background: var(--mantine-color-teal-light);
+  color: var(--mantine-color-teal-light-color);
+}
+.vendor-badge[data-color="blue"] {
+  background: var(--mantine-color-blue-light);
+  color: var(--mantine-color-blue-light-color);
+}
+.vendor-badge[data-color="indigo"] {
+  background: var(--mantine-color-indigo-light);
+  color: var(--mantine-color-indigo-light-color);
+}
+.vendor-badge[data-color="cyan"] {
+  background: var(--mantine-color-cyan-light);
+  color: var(--mantine-color-cyan-light-color);
+}
+.vendor-badge[data-color="violet"] {
+  background: var(--mantine-color-violet-light);
+  color: var(--mantine-color-violet-light-color);
+}
+.vendor-badge[data-color="grape"] {
+  background: var(--mantine-color-grape-light);
+  color: var(--mantine-color-grape-light-color);
+}
+.vendor-badge[data-color="pink"] {
+  background: var(--mantine-color-pink-light);
+  color: var(--mantine-color-pink-light-color);
+}
+.vendor-badge[data-color="yellow"] {
+  background: var(--mantine-color-yellow-light);
+  color: var(--mantine-color-yellow-light-color);
+}
+.vendor-badge[data-color="green"] {
+  background: var(--mantine-color-green-light);
+  color: var(--mantine-color-green-light-color);
+}
+.vendor-badge[data-color="lime"] {
+  background: var(--mantine-color-lime-light);
+  color: var(--mantine-color-lime-light-color);
+}
+
+/* A use-case tag. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* Connections that list a model. */
+.provider-labels {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.provider-label-set {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+/* One line: the labels take the room there is, "+n" keeps its place, and the
+   last label fades only when something really is cut off. */
+.provider-labels[data-line="one"] .provider-label-set {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.provider-labels[data-clipped] .provider-label-set {
+  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+}
+.provider-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 1px 7px 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.provider-more {
+  flex: none;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 2px;
+}
+
+/* Who measured a score. */
+.source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 550;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.source[data-kind="lab"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.source[data-kind="vendor"] {
+  background: var(--mantine-color-yellow-light);
+  color: var(--mantine-color-yellow-light-color);
+}
+.source[data-kind="community"] {
+  background: var(--surface-hover);
+  color: var(--ink-soft);
+}
+
+/* The preview. */
+.mcp {
+  cursor: pointer;
+}
+.mcp-body {
+  padding: 12px 14px 10px;
+}
+.mcp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mcp-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.mcp-tagline {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.mcp-note {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mcp-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 10px;
+}
+.mcp-fact {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mcp-fact small {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 500;
+}
+.mcp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+}
+.mcp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--page);
+}
+.mcp-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 550;
+}
+.mcp:hover .mcp-open {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

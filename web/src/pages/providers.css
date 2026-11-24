@@ -15,31 +15,26 @@
 .pv-totals {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 16px 0;
+  margin: 0 0 14px;
   border: 1px solid var(--pv-line);
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
+  background: var(--surface);
   overflow: hidden;
 }
 .pv-totals > div {
-  display: grid;
-  align-content: start;
-  gap: 3px;
-  padding: 14px 20px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 16px;
 }
 .pv-totals > div + div {
   border-inline-start: 1px solid var(--pv-line);
 }
-.pv-kicker,
-.pv-totals small {
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--pv-muted);
-}
 .pv-totals strong {
-  font-size: 1.7rem;
-  line-height: 1.15;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 .pv-totals span,
@@ -47,7 +42,7 @@
 .pv-list-head p,
 .pv-list-empty p,
 .pv-empty p {
-  font-size: 0.76rem;
+  font-size: 12.5px;
   color: var(--pv-muted);
 }
 .pv-free-text,
@@ -65,7 +60,8 @@
 .pv-inventory,
 .pv-empty {
   border: 1px solid var(--pv-line);
-  border-radius: 14px;
+  border-radius: var(--radius-panel);
+  background: var(--surface);
   min-width: 0;
 }
 .pv-directory {
@@ -114,8 +110,9 @@
   background: var(--mantine-color-default-hover);
 }
 .pv-directory-list a[aria-current] {
-  background: var(--mantine-color-teal-light);
-  border-color: color-mix(in srgb, var(--pv-accent) 30%, transparent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
 }
 .pv-connection-label {
   flex: 1;
@@ -168,7 +165,9 @@
   min-width: 0;
 }
 .pv-identity h2 {
-  font-size: 1.45rem;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
   line-height: 1.15;
   overflow-wrap: anywhere;
 }
@@ -222,11 +221,17 @@
   flex-wrap: wrap;
 }
 .pv-related a,
-.pv-model-spec a,
 .pv-empty a,
 .pv-page button:not([class]) {
   color: var(--pv-accent);
-  font-size: 0.76rem;
+  font-size: 12.5px;
+  font-weight: 550;
+  text-decoration: none;
+}
+.pv-related a:hover,
+.pv-empty a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .pv-controls {
   display: grid;
@@ -266,30 +271,23 @@
   min-width: 0;
 }
 .pv-brief {
-  margin: 6px 0 4px;
-  font-size: 0.82rem;
+  margin: 4px 0 4px;
+  font-size: 13px;
+  line-height: 1.45;
   overflow-wrap: anywhere;
-}
-.pv-brief span {
-  display: block;
-  color: var(--pv-muted);
-  font-size: 0.65rem;
-  font-weight: 650;
 }
 .pv-model-spec {
   display: grid;
   justify-items: start;
-  gap: 2px;
+  gap: 1px;
 }
 .pv-model-spec strong {
-  font: 600 0.78rem var(--mantine-font-family-monospace);
+  font: 500 12.5px var(--mantine-font-family-monospace);
+  margin-bottom: 4px;
 }
-.pv-model-spec a {
-  gap: 5px;
-  margin-top: 4px;
-}
-.pv-model-spec small.pv-seen {
-  font-size: 0.64rem;
+.pv-model-spec strong.pv-price {
+  color: var(--ink);
+  font-weight: 600;
 }
 .pv-empty,
 .pv-list-empty {

@@ -26,6 +26,8 @@ pub mod event_kind {
     pub const ALL_MODELS_FAILED: &str = "all_models_failed";
     pub const KNOWLEDGE_CARD: &str = "knowledge_card";
     pub const KNOWLEDGE_ERROR: &str = "knowledge_error";
+    pub const KNOWLEDGE_RESEARCH_STARTED: &str = "knowledge_research_started";
+    pub const KNOWLEDGE_RESEARCH_FINISHED: &str = "knowledge_research_finished";
     pub const RETENTION_PURGED: &str = "retention_purged";
 }
 

@@ -15,8 +15,13 @@
 }
 .ov-page :is(h2, h3) {
   font-weight: 650;
-  font-size: 16px;
-  letter-spacing: -0.025em;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+}
+.ov-page .panel-title :is(h2, h3) {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
 }
 .ov-page a {
   color: inherit;
@@ -41,37 +46,31 @@
   justify-content: space-between;
   align-items: center;
   gap: 18px;
-  padding: clamp(16px, 2.3vw, 32px);
+  padding: 16px 18px;
   border: 1px solid var(--ov-border);
   border-radius: var(--ov-radius);
-  background: linear-gradient(112deg, var(--mantine-color-default-hover), var(--mantine-color-body));
+  background: var(--surface);
 }
-.ov-hero[data-tone="ok"] {
-  background: linear-gradient(112deg, var(--mantine-color-teal-light), transparent 78%);
-}
+/* The one place a warning is allowed to be loud. */
 .ov-hero[data-tone="warn"] {
-  background: linear-gradient(112deg, var(--mantine-color-yellow-light), transparent 78%);
+  border-color: color-mix(in srgb, #e8b04b 45%, var(--line));
+  background: color-mix(in srgb, #e8b04b 6%, var(--surface));
 }
-.ov-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--ov-muted);
+.ov-hero[data-tone="unknown"] {
+  border-style: dashed;
 }
 .ov-status h2 {
   display: flex;
-  gap: 10px;
+  gap: 9px;
   align-items: center;
-  margin: 4px 0;
-  font-size: clamp(24px, 3vw, 38px);
-  line-height: 1.2;
-  letter-spacing: -0.045em;
+  margin: 0;
+  font-size: 21px;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.02em;
 }
 .ov-status p {
+  margin-top: 3px;
   font-size: 13px;
 }
 .ov-inventory {
@@ -92,9 +91,9 @@
 }
 .ov-counter b,
 .ov-metric b {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 650;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
   line-height: 1.3;
 }
 .ov-counter span {
@@ -156,17 +155,21 @@
 .ov-event time {
   color: var(--ov-muted);
 }
-.ov-page .ov-drill,
 .ov-page .ov-time {
   color: var(--ov-accent);
 }
+/* A link to the page behind a number. The Requests and Router events
+   headers use it outside the overview, so it carries its own color. */
 .ov-drill {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  color: var(--ov-accent);
   font-size: 12px;
   font-weight: 600;
   min-height: 28px;
+  text-decoration: none;
+  text-underline-offset: 3px;
 }
 .ov-footer {
   justify-content: space-between;
@@ -180,6 +183,19 @@
   padding-block: 8px;
   font-size: 12px;
   color: var(--ov-accent);
+}
+details.ov-coverage,
+details.ov-speed {
+  border-top: 1px solid var(--ov-border);
+}
+.ov-page details.ov-coverage > summary,
+.ov-page details.ov-speed > summary {
+  padding-block: 6px;
+}
+.ov-page details.ov-coverage > small,
+.ov-page details.ov-speed > small {
+  display: block;
+  padding: 2px 2px 8px;
 }
 .ov-snapshot {
   display: block;
@@ -215,7 +231,8 @@
   margin-top: 6px;
 }
 .ov-section-head h2 {
-  font-size: 22px;
+  font-size: 17px;
+  letter-spacing: -0.015em;
 }
 .ov-period {
   display: inline-flex;
@@ -238,6 +255,7 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   border: 1px solid var(--ov-border);
   border-radius: var(--ov-radius);
+  background: var(--surface);
   overflow: hidden;
 }
 .ov-metric {
@@ -349,7 +367,8 @@
   .ov-page :is(.ov-check, .ov-line, .ov-counter, .ov-metric, .ov-period a):hover {
     background: var(--mantine-color-default-hover);
   }
-  .ov-page :is(.ov-cell-link, .ov-drill, .ov-time):hover {
+  .ov-page :is(.ov-cell-link, .ov-time):hover,
+  .ov-drill:hover {
     text-decoration: underline;
   }
 }

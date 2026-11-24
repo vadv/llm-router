@@ -346,8 +346,8 @@ function ActivityChart({
         </Button>
       </div>
       <p id="calls-chart-help">
-        Select a bar to filter the log, or use ← → and Enter. The newest calls
-        can appear after a short delay.
+        Select a bar to filter the log. Arrow keys move, Enter selects. New
+        calls appear after a short delay.
       </p>
     </div>
   );

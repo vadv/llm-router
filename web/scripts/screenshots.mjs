@@ -27,14 +27,23 @@ const KEY = process.env.ROUTER_KEY ?? "";
 const QUERY = KEY ? "" : "mock=1&";
 const ORIGIN = new URL(BASE).origin;
 
+// `route` follows the "#/" of the address; `name` names the file, so a
+// route with a query stays a clean file name.
 const PAGES = [
-  "overview",
-  "usage",
-  "balances",
-  "providers",
-  "pools",
-  "history",
-  "activity",
+  { route: "overview", name: "overview" },
+  { route: "usage", name: "usage" },
+  { route: "balances", name: "balances" },
+  { route: "providers", name: "providers" },
+  { route: "pools", name: "pools" },
+  { route: "history", name: "history" },
+  { route: "activity", name: "activity" },
+  { route: "wiki", name: "wiki" },
+  { route: "wiki?view=leaderboard", name: "wiki-leaderboard" },
+  // A job in progress: the mock opens with one for this route.
+  { route: "wiki?job=running", name: "wiki-research" },
+  // A key of the mock catalog.
+  { route: "wiki?model=glm-4-6", name: "wiki-dossier" },
+  { route: "chat", name: "chat" },
 ];
 
 // Widths matter more than device names: 1440 hides an overflow that appears
@@ -282,11 +291,11 @@ async function main() {
       });
 
       if (viewport.name !== "extra") {
-        for (const route of PAGES) {
+        for (const { route, name } of PAGES) {
           await shoot(
             send,
-            `${BASE}/?${QUERY}shot=${route}${viewport.name}#/${route}`,
-            `${OUT}/${route}-${viewport.name}.jpg`,
+            `${BASE}/?${QUERY}shot=${name}${viewport.name}#/${route}`,
+            `${OUT}/${name}-${viewport.name}.jpg`,
             // A tall page at scale 2 exceeds the capture limit, so a phone
             // gets the first screen. The probe still measures the document.
             !viewport.mobile,

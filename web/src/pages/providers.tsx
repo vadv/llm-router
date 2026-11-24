@@ -1,7 +1,6 @@
 import { Alert, Button, Menu, NativeSelect, TextInput } from "@mantine/core";
 import {
   IconAdjustmentsHorizontal,
-  IconBook,
   IconChevronRight,
   IconDatabase,
   IconRefresh,
@@ -18,9 +17,9 @@ import {
 import { ProviderLogo } from "../components/provider-logo";
 import { ModelHoverCard } from "../components/model-card";
 import { Copyable, PageHeader, RelTime } from "../components/ui";
-import { contextWindow, dateTime } from "../format";
+import { contextWindow } from "../format";
 import { routeParam, usePoll } from "../hooks";
-import { freeLabel, idleSlots, inventoryRows } from "../provider-inventory";
+import { contextOf, freeLabel, idleSlots, inventoryRows, priceLabel } from "../provider-inventory";
 import { useModelSummaries } from "../use-model-summaries";
 import { drillUrl } from "./overview-links";
 import "./providers.css";
@@ -85,10 +84,9 @@ export function ProvidersPage() {
     );
   return (
     <div className="pv-page">
-      <div className="ov-eyebrow">Routing / Connections</div>
       <PageHeader
         title="Providers"
-        description="Configured connections, provider catalogs, and models marked free."
+        description="The connections this router can reach and the models each one lists."
         actions={
           <Menu position="bottom-end" withArrow>
             <Menu.Target>
@@ -155,25 +153,18 @@ export function ProvidersPage() {
       )}
       <div className="pv-totals" aria-label="Connection summary">
         <div>
-          <small>Connections</small>
           <strong>{connections.data ? groups.length : "—"}</strong>
-          <span>configured on this router</span>
+          <span>connections</span>
         </div>
         <div>
-          <small>Model listings</small>
           <strong>{known && connections.data ? totals.models : "—"}</strong>
-          <span>one upstream ID per connection</span>
+          <span>model listings</span>
         </div>
         <div>
-          <small>Listings marked free</small>
           <strong className="pv-free-text">
             {known && connections.data ? totals.free : "—"}
           </strong>
-          <span>
-            {known && connections.data
-              ? `across ${totals.connections} ${totals.connections === 1 ? "connection" : "connections"}`
-              : "catalog not yet known"}
-          </span>
+          <span>marked free</span>
         </div>
       </div>
       <div className="pv-layout">
@@ -241,8 +232,7 @@ export function ProvidersPage() {
             ))}
           </nav>
           <p className="pv-directory-note">
-            Free labels come from model IDs. Unlabeled listings may still be
-            included in your plan.
+            “Free” is a label in the model ID. Unlabeled models may still be in your plan.
           </p>
         </section>
         {active ? (
@@ -341,11 +331,8 @@ function ProviderInventory({
     >
       <header className="pv-inventory-head">
         <div className="pv-identity">
-          <ProviderLogo providerId={p.provider_id} size={36} />
-          <div>
-            <span className="pv-kicker">Provider catalog</span>
-            <h2>{p.provider_id}</h2>
-          </div>
+          <ProviderLogo providerId={p.provider_id} size={34} />
+          <h2>{p.provider_id}</h2>
         </div>
         <span className="pv-tag">
           <IconDatabase size={12} />
@@ -367,7 +354,7 @@ function ProviderInventory({
           />
         </span>
         <Copyable value={p.provider_id} size="xs">
-          Connection ID
+          Copy ID
         </Copyable>
       </div>
       {p.last_refresh?.last_error && (
@@ -398,24 +385,19 @@ function ProviderInventory({
       )}
       <div className="pv-list-head">
         <div>
-          <h3>{free ? "Models marked free" : "Model catalog"}</h3>
-          <p>
-            {free
-              ? "These IDs carry a free label. Check quotas and plan terms separately."
-              : "Use cases are shown inline. A free label is not a check of current quota or availability."}
-          </p>
+          <h3>{free ? "Models marked free" : "Models"}</h3>
+          {free && <p>Free labels come from the IDs. Quotas and plan terms are on the balances page.</p>}
         </div>
         <div className="pv-related">
-          <a href={drillUrl("balances", { provider: p.provider_id })}>
-            Balances ↗
-          </a>
-          <a href={drillUrl("usage", { provider: p.provider_id })}>Usage ↗</a>
+          <a href={drillUrl("wiki", { connection: p.provider_id })}>In Model Wiki</a>
+          <a href={drillUrl("balances", { provider: p.provider_id })}>Balances</a>
+          <a href={drillUrl("usage", { provider: p.provider_id })}>Usage</a>
         </div>
       </div>
       <div className="pv-controls">
         <TextInput
           aria-label="Search model catalog"
-          placeholder="Find a model or use case…"
+          placeholder="Find a model"
           size="xs"
           leftSection={<IconSearch size={14} />}
           value={query}
@@ -477,7 +459,10 @@ function ProviderInventory({
             Showing {Math.min(limit, shown.length)} of {shown.length} listings
           </div>
           <ul className="pv-models">
-            {shown.slice(0, limit).map(({ row, name, brief, labeled }) => (
+            {shown.slice(0, limit).map(({ row, name, brief, labeled, card }) => {
+              const price = priceLabel(card);
+              const context = contextOf(row, card);
+              return (
               <li key={row.upstream_id}>
                 <div className="pv-model-main">
                   <div className="pv-model-title">
@@ -489,43 +474,36 @@ function ProviderInventory({
                         {name}
                       </ModelHoverCard>
                     </h4>
-                    <span className={"pv-tag" + (labeled ? " is-free" : "")}>
-                      {labeled ? "Marked free by provider" : "Price not reported"}
-                    </span>
+                    {labeled && <span className="pv-tag is-free">Free</span>}
                   </div>
                   <div className="pv-brief">
-                    <span>{brief.source || "Use case"}</span>
                     <p>
-                      {brief.source || index.state?.cards
+                      {card
                         ? brief.text
                         : index.state?.error
-                          ? "Wiki unavailable"
-                          : "Reading use case…"}
+                          ? "No research card"
+                          : "No research card yet"}
                     </p>
                   </div>
                   <Copyable value={row.upstream_id} block size="xs" />
                 </div>
                 <div className="pv-model-spec">
-                  <small>Context window</small>
-                  <strong>
-                    {row.context_tokens != null && row.context_tokens > 0
-                      ? `${contextWindow(row.context_tokens)} tokens`
-                      : "Not reported"}
-                  </strong>
-                  <a
-                    href={drillUrl("wiki", { model: row.knowledge_key })}
-                    aria-label={`Open Model Wiki for ${row.upstream_id}`}
-                  >
-                    <IconBook size={13} /> Model Wiki
-                  </a>
-                  {row.observed_at_unix != null && (
-                    <small className="pv-seen">
-                      Seen {dateTime(row.observed_at_unix)}
-                    </small>
+                  {price && (
+                    <>
+                      <small>List price / 1M</small>
+                      <strong className="pv-price">{price}</strong>
+                    </>
+                  )}
+                  {context && (
+                    <>
+                      <small>Context{context.from === "card" ? " · Wiki card" : ""}</small>
+                      <strong>{contextWindow(context.tokens)} tokens</strong>
+                    </>
                   )}
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
           {limit < shown.length && (
             <Button

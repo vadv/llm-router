@@ -36,12 +36,13 @@ export function ConversationLibrary({
   return (
     <section className="thread-library" aria-label="Conversation library">
       <div className="thread-library-head">
-        <div className="thread-kicker">CHAT HISTORY</div>
         <h2>
-          Conversations <span>{conversations.length}</span>
+          Conversations{" "}
+          {conversations.length > 0 && <span className="thread-count">{conversations.length}</span>}
         </h2>
         <Button
           fullWidth
+          size="sm"
           leftSection={<IconPlus size={16} />}
           onClick={onNew}
           disabled={disabled}
@@ -52,7 +53,7 @@ export function ConversationLibrary({
           type="search"
           size="xs"
           aria-label="Find conversations"
-          placeholder="Find a conversation…"
+          placeholder="Find a conversation"
           leftSection={<IconSearch size={14} />}
           value={search}
           onChange={(e) => setSearch(e.currentTarget.value)}
@@ -61,7 +62,7 @@ export function ConversationLibrary({
       <div className="thread-library-items">
         {visible.length > 0 ? (
           <>
-            <div className="thread-kicker">{query ? "MATCHES" : "RECENT"}</div>
+            <div className="thread-section-label">{query ? "Matches" : "Recent"}</div>
             {visible.map((c) => (
               <div
                 key={c.id}

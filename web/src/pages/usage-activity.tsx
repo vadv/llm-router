@@ -45,6 +45,9 @@ export function UsageActivity({
   const index = Math.min(cursor ?? peak, bins.length - 1),
     bin = bins[index];
   const max = Math.max(0, ...values.map((n) => n ?? 0));
+  // Whether any column is drawn hatched, which is the one thing here that
+  // needs explaining.
+  const hatched = bins.some((b, i) => b.cell.attempts > 0 && values[i] === null);
   const at = (e: { clientX: number; currentTarget: HTMLElement }) => {
     const rect = e.currentTarget.getBoundingClientRect();
     return Math.max(
@@ -208,8 +211,8 @@ export function UsageActivity({
         </span>
       </div>
       <small>
-        Select or drag columns to filter the table. Use ← → and Enter on the
-        keyboard. Hatched intervals have attempts but no value for this metric.
+        Drag across columns to filter the table. Arrow keys move, Enter selects.
+        {hatched && " Hatched intervals have attempts but no value for this metric."}
       </small>
     </div>
   );

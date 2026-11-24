@@ -1,11 +1,12 @@
-import type { KnowledgeRating, LiveCatalogModel, ModelSummary } from "./api";
-import { benchmarks, wikiGroups } from "./wiki-catalog.ts";
+import type { LiveCatalogModel, ModelSummary } from "./api";
+import type { Score } from "./model-facts";
+import { benchmarks, wikiGroups, wikiModels } from "./wiki-catalog.ts";
 
 export type EvidenceGoal = "design" | "vision";
 export type CandidateEvidence = {
   imageInput: boolean;
   task: string | null;
-  result?: KnowledgeRating;
+  result?: Score;
 };
 
 // Accept explicit image input, never image generation or unspecified multimodality.
@@ -35,15 +36,14 @@ export function documentsImageInput(modality: string | null | undefined) {
   });
 }
 
-function relevantMetric(goal: EvidenceGoal, metric: string) {
+function relevantMetric(goal: EvidenceGoal, id: string) {
   // Ranking is descending. Do not mix rank, error or latency with higher-is-better scores.
-  if (/rank|error|latency|cost|\btime\b|lower|\bloss\b/i.test(metric))
-    return false;
+  if (/rank|error|latency|cost|\btime\b|lower|\bloss\b/i.test(id)) return false;
   return goal === "design"
-    ? /\b(?:web[ -]?dev|design2code|frontend[ -]?bench)\b/i.test(metric) &&
-        /elo|score|accuracy|similarity|win rate|pass@/i.test(metric)
-    : /\b(?:screen[ -]?spot|screenqa|visualwebbench)\b/i.test(metric) &&
-        /accuracy|score|success|grounding|%/i.test(metric);
+    ? /\b(?:web[ -]?dev|design2code|frontend[ -]?bench)\b/i.test(id) &&
+        /elo|score|accuracy|similarity|win rate|pass@/i.test(id)
+    : /\b(?:screen[ -]?spot|screenqa|visualwebbench)\b/i.test(id) &&
+        /accuracy|score|success|grounding|%/i.test(id);
 }
 
 export function poolEvidence(
@@ -53,10 +53,11 @@ export function poolEvidence(
   requested: string,
 ) {
   const groups = wikiGroups(rows, cards);
-  const options = benchmarks(groups).filter((o) =>
-    relevantMetric(goal, JSON.parse(o.value)[1]),
+  // One benchmark family is one column, whoever measured it.
+  const options = benchmarks(wikiModels(groups)).filter((o) =>
+    relevantMetric(goal, o.id),
   );
-  const metric = options.find((o) => o.value === requested) ?? options[0];
+  const metric = options.find((o) => o.id === requested) ?? options[0];
   const byKey = new Map<string, CandidateEvidence>();
   for (const g of groups) {
     const fields = [g.card?.primary_use, g.card?.description];
@@ -80,7 +81,7 @@ export function poolEvidence(
           ? "UI work mentioned in Wiki"
           : "Screen tasks mentioned in Wiki"
         : null,
-      result: metric ? g.scores.get(metric.value) : undefined,
+      result: metric ? g.scores.get(metric.id) : undefined,
     });
   }
   return { options, metric, byKey };

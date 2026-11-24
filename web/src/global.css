@@ -1,16 +1,124 @@
+/* Design tokens. One neutral ramp per scheme and a single accent. Surfaces
+   stack — page, panel, hover — and hairlines, not shadows, tell them apart.
+   Pages read these; nothing below restates a colour. */
+:root {
+  --page: var(--mantine-color-body);
+  --surface: var(--mantine-color-default);
+  --surface-hover: var(--mantine-color-default-hover);
+  --line: var(--mantine-color-default-border);
+  --ink: var(--mantine-color-text);
+  --ink-soft: var(--mantine-color-dimmed);
+  --ink-faint: var(--mantine-color-placeholder);
+  --accent: light-dark(#0b7a58, #3ddca6);
+  --accent-soft: color-mix(in srgb, var(--mantine-color-teal-6) 12%, var(--surface));
+  --accent-softer: color-mix(in srgb, var(--mantine-color-teal-6) 7%, var(--surface));
+  --accent-line: color-mix(in srgb, var(--mantine-color-teal-6) 32%, var(--line));
+  --radius-panel: 10px;
+  --radius-control: 6px;
+  --header-h: 50px;
+  --nav-w: 216px;
+}
+
 html,
 body,
 #root {
   min-height: 100%;
 }
 
-/* A quiet network-ish glow behind the content; nothing moves, nothing
-   competes with the data. */
-[data-mantine-color-scheme="dark"] body {
-  background-image:
-    radial-gradient(900px 480px at 84% -12%, rgba(32, 201, 178, 0.1), transparent 65%),
-    radial-gradient(720px 420px at -5% 0%, rgba(94, 124, 255, 0.08), transparent 62%);
-  background-attachment: fixed;
+/* Mantine's light scheme is pure black on pure white. This is the same
+   scheme with the contrast eased and the page a step under the panels. */
+html[data-mantine-color-scheme="light"] {
+  --mantine-color-body: #f4f5f7;
+  --mantine-color-text: #15171b;
+  --mantine-color-dimmed: #626975;
+  --mantine-color-placeholder: #9ba1ab;
+  --mantine-color-default: #ffffff;
+  --mantine-color-hover: #f1f2f5;
+  --mantine-color-default-hover: #f1f2f5;
+  --mantine-color-default-border: #e4e6ea;
+  --mantine-color-anchor: #0b7a58;
+}
+
+/* The accent tint: a wash of the brand colour over the current surface, so
+   a selected row sits in the panel instead of on top of it. */
+html[data-mantine-color-scheme] {
+  --mantine-color-teal-light: color-mix(in srgb, var(--mantine-color-teal-6) 12%, var(--surface));
+  --mantine-color-teal-light-hover: color-mix(in srgb, var(--mantine-color-teal-6) 18%, var(--surface));
+  --mantine-color-teal-outline: color-mix(in srgb, var(--mantine-color-teal-6) 30%, var(--line));
+}
+html[data-mantine-color-scheme="dark"] {
+  --mantine-color-teal-light-color: #3ddca6;
+  --mantine-color-anchor: #3ddca6;
+}
+html[data-mantine-color-scheme="light"] {
+  --mantine-color-teal-light-color: #0b7a58;
+}
+
+/* Cursor contract. One rule per meaning, so a control never shows a cursor
+   it does not earn:
+     pointer     — clicking does something
+     not-allowed — it would, but it is disabled
+     progress    — it is doing it
+     help        — hovering explains, clicking does nothing
+     text        — a field to type in
+     crosshair   — a plot to select on
+   Component libraries set `cursor: default` on buttons and their selectors
+   outrank element selectors, hence !important on these three rules only. */
+:where(
+    a[href],
+    button,
+    summary,
+    select,
+    label[for],
+    label:has(input[type="checkbox"], input[type="radio"]),
+    /* A label wrapped around its control focuses or opens it when clicked. */
+    label:has(select, textarea, button, input:not([type="hidden"])),
+    .mantine-SegmentedControl-label,
+    /* Button-like and picker inputs. A field to type in is named below, and
+       an input without a type is one of those. */
+    input:is([type="button"], [type="submit"], [type="reset"], [type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+    /* A select's field opens a list, searchable or not. */
+    input[role="combobox"],
+    textarea[readonly],
+    [role="button"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [role="menuitemradio"],
+    [role="option"],
+    [role="switch"],
+    [role="checkbox"],
+    [role="radio"],
+    [role="treeitem"],
+    .mantine-InputWrapper-label,
+    .mantine-Checkbox-root:not([data-disabled]) :is(label, .mantine-Checkbox-icon),
+    .mantine-Radio-root:not([data-disabled]) :is(label, .mantine-Radio-icon),
+    .mantine-Switch-root:not([data-disabled]) :is(label, .mantine-Switch-track)
+  ):not(:disabled, [aria-disabled="true"], [data-disabled], [data-readonly]) {
+  cursor: pointer !important;
+}
+:where(button, select, input, textarea, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="switch"], [role="checkbox"], [role="radio"]):is(:disabled, [aria-disabled="true"], [data-disabled]),
+  label:has(:disabled, [aria-disabled="true"], [data-disabled], [data-readonly]) {
+  cursor: not-allowed !important;
+}
+:where(button, [role="button"]):is([data-loading], .mantine-Button-loading) {
+  cursor: progress !important;
+}
+/* A field to type in keeps the text cursor inside a label that shows a
+   pointer. Cursor is inherited, so this has to be said on the field. */
+:where(
+    input:is([type="text"], [type="search"], [type="password"], [type="number"], [type="email"], [type="url"], [type="tel"], [type="date"], [type="time"], [type="datetime-local"], [type="month"], [type="week"]),
+    input:not([type]),
+    textarea
+  ):not([readonly], [role="combobox"]) {
+  cursor: text;
+}
+
+/* Keyboard focus: one ring everywhere, including on plain elements that
+   bring no style of their own. */
+:where(a[href], button, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--mantine-color-teal-5);
+  outline-offset: 2px;
 }
 
 .num {
@@ -22,41 +130,163 @@ body,
   font-size: 0.86em;
 }
 
-.page-heading { padding-block: .35rem .65rem; border-bottom: 1px solid var(--mantine-color-default-border); }
-.nav-section { padding: .8rem .75rem .3rem; color: var(--mantine-color-dimmed); font-size: .64rem; font-weight: 650; letter-spacing: .09em; text-transform: uppercase; }
-.nav-destination { text-decoration: none; }
-.nav-destination:hover { background: var(--mantine-color-default-hover); }
-.nav-destination[aria-current="page"] { box-shadow: inset 2px 0 var(--mantine-color-teal-6); }
-.copy-id { display: inline-flex; align-items: center; gap: .35rem; appearance: none; border: 0; padding: 0; min-width: 0; background: none; color: inherit; cursor: pointer; }
-.copy-id:focus-visible, .nav-destination:focus-visible, .request-open:focus-visible { outline: 2px solid var(--mantine-color-teal-5); outline-offset: 1px; }
-.request-open { font: inherit; border: 0; padding: .2rem 0; background: none; color: var(--mantine-color-anchor); text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
-.event-detail summary { cursor: pointer; font-size: .78rem; overflow-wrap: anywhere; }
-.event-detail pre { margin: .35rem 0; padding: .55rem; border-radius: .3rem; background: var(--mantine-color-default-hover); white-space: pre-wrap; overflow-wrap: anywhere; font-size: .72rem; }
+/* Every page opens with one title and at most one line under it. */
+.page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 0 14px;
+}
+.page-title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.page-lede {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  max-width: 68ch;
+}
+
+/* Navigation: section names in the same voice as the page, the current page
+   as a tinted row. */
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 8px 8px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--mantine-color-teal-6);
+  color: #fff;
+}
+.nav-section {
+  padding: 16px 10px 4px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.nav-destination {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 1px;
+  padding: 6px 10px;
+  border-radius: var(--radius-control);
+  font-size: 13px;
+  font-weight: 450;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+.nav-destination svg {
+  color: var(--ink-faint);
+  flex: none;
+}
+.nav-destination:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+.nav-destination[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 550;
+}
+.nav-destination[aria-current="page"] svg {
+  color: var(--accent);
+}
+.nav-destination:focus-visible {
+  outline: 2px solid var(--mantine-color-teal-5);
+  outline-offset: -2px;
+}
+
+/* An identifier with a copy button. Ids are what people paste into configs. */
+.copy-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+/* A flex item is no narrower than its text unless told; this one truncates. */
+.copy-id > :first-child {
+  min-width: 0;
+}
+.copy-id:focus-visible,
+.request-open:focus-visible {
+  outline: 2px solid var(--mantine-color-teal-5);
+  outline-offset: 1px;
+}
+.request-open {
+  font: inherit;
+  border: 0;
+  padding: 0.2rem 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.event-detail summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.event-detail summary:hover {
+  color: var(--ink);
+}
+.event-detail pre {
+  margin: 0.35rem 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-control);
+  background: var(--surface-hover);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
 
 /* Status dots: one shape, colour carries the meaning. */
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex: 0 0 auto;
-  background: var(--mantine-color-gray-6);
+  background: var(--ink-faint);
 }
-
 .dot[data-tone="ok"] {
-  background: var(--mantine-color-teal-5);
-  box-shadow: 0 0 0 3px rgba(32, 201, 178, 0.16);
+  background: #2fbf8f;
 }
-
 .dot[data-tone="warn"] {
-  background: var(--mantine-color-yellow-5);
-  box-shadow: 0 0 0 3px rgba(250, 176, 5, 0.16);
+  background: #e8b04b;
 }
-
 .dot[data-tone="bad"] {
-  background: var(--mantine-color-red-5);
-  box-shadow: 0 0 0 3px rgba(250, 82, 82, 0.16);
+  background: #ec5b55;
 }
-
 .dot[data-tone="ok"][data-live="true"] {
   animation: dot-pulse 2.4s ease-in-out infinite;
 }
@@ -64,28 +294,20 @@ body,
 @keyframes dot-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 3px rgba(32, 201, 178, 0.16);
+    box-shadow: 0 0 0 0 rgba(47, 191, 143, 0.5);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(32, 201, 178, 0.04);
+    box-shadow: 0 0 0 4px rgba(47, 191, 143, 0);
   }
-}
-
-/* Table rows that open a detail view. */
-.rowlink tbody tr {
-  cursor: pointer;
-}
-
-.rowlink tbody tr[data-failed="true"] td {
-  background: light-dark(rgba(250, 82, 82, 0.045), rgba(250, 82, 82, 0.07));
 }
 
 /* Numbers line up in the header summary. */
 .stat-value {
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   font-weight: 600;
-  line-height: 1.15;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 /* Long ids wrap instead of pushing the layout. */
@@ -93,62 +315,116 @@ body,
   overflow-wrap: anywhere;
 }
 
-/* Inline model ids open a researched card. Only the text is the hover
-   target, so table rows stay clickable and truncation keeps working. */
+/* Inline model ids preview a researched card on hover and open it in the
+   Wiki on click. Only the text is the target, so table rows and list items
+   around it keep their own clicks and truncation keeps working. */
 .model-hover-target {
   display: inline-block;
   max-width: 100%;
   min-width: 0;
   vertical-align: middle;
-  cursor: help;
+  cursor: pointer;
   border-bottom: 1px dotted transparent;
   border-radius: 2px;
   transition: border-color 120ms ease, color 120ms ease;
 }
-
 .model-hover-block {
   display: block;
   width: 100%;
 }
-
 .model-hover-target:hover,
 .model-hover-target:focus-visible {
-  border-bottom-color: var(--mantine-color-teal-5);
-  color: var(--mantine-color-teal-5);
-  outline: none;
-}
-
-/* Wiki model tiles: a dense, balanced grid that reacts to the pointer. */
-.wiki-tile {
-  cursor: pointer;
-  min-width: 0;
-  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
-}
-
-.wiki-tile:hover,
-.wiki-tile:focus-visible {
-  transform: translateY(-2px);
-  border-color: var(--mantine-color-teal-6);
-  box-shadow: 0 8px 24px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.28));
+  border-bottom-style: solid;
+  border-bottom-color: currentColor;
+  color: var(--accent);
   outline: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dot[data-live="true"] { animation: none; }
-  .wiki-tile, .model-hover-target { transition: none; }
-  .wiki-tile:hover, .wiki-tile:focus-visible { transform: none; }
+  .dot[data-live="true"] {
+    animation: none;
+  }
+  .model-hover-target,
+  .nav-destination {
+    transition: none;
+  }
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
-
 ::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
   border-radius: 8px;
-  background: light-dark(rgba(0, 0, 0, 0.18), rgba(255, 255, 255, 0.14));
+  background: light-dark(rgba(20, 24, 30, 0.22), rgba(255, 255, 255, 0.16)) padding-box;
 }
-
+::-webkit-scrollbar-thumb:hover {
+  background: light-dark(rgba(20, 24, 30, 0.36), rgba(255, 255, 255, 0.26)) padding-box;
+}
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* A page that failed to render. */
+.page-crash {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding: 22px 24px;
+  border: 1px solid color-mix(in srgb, #ec5b55 40%, var(--line));
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+.page-crash h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.page-crash p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.page-crash pre {
+  max-width: 100%;
+  margin: 4px 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  background: var(--page);
+  color: var(--ink);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.page-crash-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+.page-crash-actions button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+}
+.page-crash-actions a {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.chat-loading {
+  display: grid;
+  place-items: center;
+  height: calc(100dvh - var(--app-shell-header-height, 50px));
+  color: var(--ink-soft);
+  font-size: 13px;
 }

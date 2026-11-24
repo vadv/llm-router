@@ -4,10 +4,8 @@ import {
   IconArrowUpRight,
   IconCheck,
   IconChevronRight,
-  IconHeartbeat,
   IconLayersSubtract,
   IconPlugConnected,
-  IconWallet,
 } from "@tabler/icons-react";
 import { api, type Health } from "../api";
 import { balanceReading, balanceRisk, readingGroups } from "../components/balance-math";
@@ -15,7 +13,7 @@ import { overviewPeriod, PERIODS, poolCoverage } from "../components/overview-ma
 import { Dot, PageHeader, Panel } from "../components/ui";
 import { clock, dateTime, uptime } from "../format";
 import { routeParam, usePoll, type Resource, type Route } from "../hooks";
-import { eventStory } from "../components/event-story";
+import { eventStory, foldCards } from "../components/event-story";
 import { OverviewTraffic } from "./overview-traffic";
 import { Drill, SourceNote, drillUrl } from "./overview-links";
 import "./overview.css";
@@ -44,7 +42,8 @@ export function OverviewPage({ health }: { health: Resource<Health> }) {
   const pools = usePoll(api.pools, []);
   const bans = usePoll(api.bans, []);
   const balances = usePoll(api.observations, []);
-  const events = usePoll(() => api.events(5), []);
+  // More than five are read, because a run of card updates is one line.
+  const events = usePoll(() => api.events(30), []);
   const period = overviewPeriod(routeParam("period"));
   const core = health.data;
   const broken = core ? brokenComponents(core) : [];
@@ -122,9 +121,6 @@ export function OverviewPage({ health }: { health: Resource<Health> }) {
       />
       <section className="ov-hero" data-tone={tone} aria-labelledby="ov-status">
         <div className="ov-status">
-          <div className="ov-eyebrow">
-            <IconHeartbeat size={16} /> System status
-          </div>
           <h2 id="ov-status">
             <Dot tone={tone} />
             {status}
@@ -140,7 +136,7 @@ export function OverviewPage({ health }: { health: Resource<Health> }) {
           </p>
           {health.updatedAt && (
             <small>
-              Last checked {clock(health.updatedAt / 1000)} · uptime {core ? uptime(core.uptime_unix) : "—"}
+              Checked {clock(health.updatedAt / 1000)} · up {core ? uptime(core.uptime_unix) : "—"}
             </small>
           )}
         </div>
@@ -164,8 +160,7 @@ export function OverviewPage({ health }: { health: Resource<Health> }) {
       <div className="ov-grid">
         <Panel
           title={<h2>Needs attention</h2>}
-          description="Core failures, active bans and balances with 20% or less left."
-          actions={<IconWallet size={17} aria-hidden="true" />}
+          description="Failures, bans and balances at 20% or less."
         >
           <SourceNote source={health} name="health" />
           <SourceNote source={bans} name="bans" />
@@ -200,7 +195,7 @@ export function OverviewPage({ health }: { health: Resource<Health> }) {
         </Panel>
         <Panel
           title={<h2>Pool members</h2>}
-          description="Members not on the active ban list. This is not an upstream availability check."
+          description="Not on the ban list. Not an availability check."
           actions={<Drill href="#/pools">Pools</Drill>}
         >
           <SourceNote source={pools} name="pools" />
@@ -234,10 +229,7 @@ export function OverviewPage({ health }: { health: Resource<Health> }) {
 
       <section aria-labelledby="ov-traffic-title" className="ov-traffic">
         <header className="ov-section-head">
-          <div>
-            <div className="ov-eyebrow">Stored history</div>
-            <h2 id="ov-traffic-title">Traffic report</h2>
-          </div>
+          <h2 id="ov-traffic-title">Traffic</h2>
           <nav aria-label="Traffic period" className="ov-period">
             {Object.keys(PERIODS).map((p) => (
               <a
@@ -254,7 +246,7 @@ export function OverviewPage({ health }: { health: Resource<Health> }) {
       </section>
 
       <div className="ov-grid">
-        <Panel title={<h2>Component health</h2>} description="Open a component for details.">
+        <Panel title={<h2>Components</h2>}>
           <SourceNote source={health} name="component checks" />
           <div className="ov-checks">
             {entries.map(([name, c]) => {
@@ -283,7 +275,7 @@ export function OverviewPage({ health }: { health: Resource<Health> }) {
         </Panel>
         <Panel
           title={<h2>Latest events</h2>}
-          description="Last five router events, independent of the traffic period."
+          description="The last five, whatever the period."
           actions={<Drill href="#/activity">Router events</Drill>}
         >
           <SourceNote source={events} name="events" />
@@ -292,17 +284,43 @@ export function OverviewPage({ health }: { health: Resource<Health> }) {
               No events logged yet.
             </Text>
           )}
-          {events.data?.map((e) => {
-            const story = eventStory(e);
-            return <a key={e.id} className="ov-line ov-event" href={drillUrl("activity", { kind: e.kind })}>
-              <time title={dateTime(e.ts_unix)}>{clock(e.ts_unix)}</time>
-              <span>
-                <strong>{story.title}</strong>
-                <small>{story.note}</small>
-              </span>
-              <IconChevronRight size={14} />
-            </a>;
-          })}
+          {events.data &&
+            foldCards(events.data, 2)
+              .slice(0, 5)
+              .map((item) =>
+                "cards" in item ? (
+                  <a
+                    key={`cards-${item.cards[0].id}`}
+                    className="ov-line ov-event"
+                    href="#/wiki"
+                  >
+                    <time title={dateTime(item.cards[0].ts_unix)}>{clock(item.cards[0].ts_unix)}</time>
+                    <span>
+                      <strong>
+                        Model Wiki: {item.cards.length} cards updated
+                      </strong>
+                      <small>
+                        {clock(item.cards.at(-1)!.ts_unix)} – {clock(item.cards[0].ts_unix)}
+                        {item.cards.length > 1 ? ` · latest ${eventStory(item.cards[0]).model ?? ""}` : ""}
+                      </small>
+                    </span>
+                    <IconChevronRight size={14} />
+                  </a>
+                ) : (
+                  <a
+                    key={item.event.id}
+                    className="ov-line ov-event"
+                    href={drillUrl("activity", { kind: item.event.kind })}
+                  >
+                    <time title={dateTime(item.event.ts_unix)}>{clock(item.event.ts_unix)}</time>
+                    <span>
+                      <strong>{eventStory(item.event).title}</strong>
+                      <small>{eventStory(item.event).note}</small>
+                    </span>
+                    <IconChevronRight size={14} />
+                  </a>
+                ),
+              )}
         </Panel>
       </div>
     </div>

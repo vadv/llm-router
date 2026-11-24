@@ -133,7 +133,7 @@
 }
 
 .chat-icon-btn:disabled {
-  cursor: default;
+  cursor: not-allowed;
   opacity: 0.55;
 }
 
@@ -309,8 +309,7 @@
 }
 
 .chat-tool-label {
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-weight: 600;
 }
 
 .chat-tool-note {

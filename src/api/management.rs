@@ -15,7 +15,6 @@ use serde_json::json;
 use crate::api::{ApiState, api_error, bearer_secret};
 use crate::metamodel::{Metamodel, MetamodelId};
 use crate::model::{ModelId, ProviderId};
-use crate::storage::events::event_kind;
 
 fn now_unix() -> i64 {
     std::time::SystemTime::now()
@@ -394,14 +393,21 @@ pub async fn list_catalog(State(state): State<Arc<ApiState>>, headers: HeaderMap
         Ok(m) => m,
         Err(e) => return internal(&e.0),
     };
+    let exact: Vec<String> = models
+        .iter()
+        .map(|m| crate::model::knowledge_key(&m.upstream_id))
+        .collect();
+    let keys = crate::model::catalog_keys(&exact);
     let models: Vec<serde_json::Value> = models
         .into_iter()
-        .map(|m| {
+        .zip(exact)
+        .map(|(m, exact)| {
             json!({
                 "provider_id": m.provider_id,
                 "upstream_id": m.upstream_id,
                 "context_tokens": m.context_tokens,
-                "knowledge_key": crate::model::knowledge_key(&m.upstream_id),
+                "knowledge_key": keys.get(&crate::model::knowledge_identity(&exact))
+                    .map(String::as_str).unwrap_or(&exact),
                 "observed_at_unix": m.observed_at_unix,
             })
         })
@@ -1133,11 +1139,12 @@ pub struct KnowledgePost {
 /// `hy4flash-free`).
 fn knowledge_entries(state: &ApiState, key: &str) -> Result<Vec<serde_json::Value>, String> {
     let models = state.models.lock().unwrap().list_all().map_err(|e| e.0)?;
+    let identity = crate::model::knowledge_identity(key);
     Ok(models
         .into_iter()
         .filter(|m| {
-            let model_key = crate::model::knowledge_key(&m.upstream_id);
-            model_key == key || model_key.replace('-', "") == key.replace('-', "")
+            crate::model::knowledge_identity(&crate::model::knowledge_key(&m.upstream_id))
+                == identity
         })
         .map(|m| json!({"provider_id": m.provider_id, "upstream_id": m.upstream_id}))
         .collect())
@@ -1175,6 +1182,8 @@ pub async fn get_model_knowledge(
         "key": key,
         "card": stored.as_ref().and_then(|c| serde_json::from_str::<serde_json::Value>(&c.card_json).ok()),
         "collected_at_unix": stored.as_ref().map(|c| c.collected_at_unix),
+        // What researched the card, e.g. "deepseek/deepseek-flash+websearch".
+        "generator": stored.as_ref().map(|c| c.generator.as_str()),
         "fresh": fresh,
         "max_age_secs": max_age_secs,
         "catalog_entries": entries,
@@ -1210,65 +1219,21 @@ pub async fn post_model_knowledge(
     }
 
     let key = crate::model::knowledge_key(&params.upstream_id);
-    let max_age_secs = cfg.max_age.as_secs() as i64;
-    if !params.force {
-        let fresh = state
-            .knowledge
-            .get(&key)
-            .ok()
-            .flatten()
-            .map(|c| now_unix() - c.collected_at_unix < max_age_secs)
-            .unwrap_or(false);
-        if fresh {
-            return ok_json(json!({"key": key, "collected": false, "reason": "fresh"}));
-        }
+    if !params.force && crate::research::is_fresh(&state, &key, cfg.max_age.as_secs() as i64) {
+        return ok_json(json!({"key": key, "collected": false, "reason": "fresh"}));
     }
-
-    let provider = state
-        .providers
-        .get(&crate::model::ProviderId::new(cfg.provider_id.clone()));
-    let Some(provider) = provider else {
-        return internal("knowledge provider disappeared from the registry");
-    };
-    let collected = crate::provider::knowledge::research_card(
-        provider.driver(),
-        &cfg.model,
-        &params.upstream_id,
-        &params.provider_id,
-    )
-    .await;
-    let collected = match collected {
-        Ok(c) => c,
-        Err(e) => {
-            crate::schedule::emit(
-                &state,
-                event_kind::KNOWLEDGE_ERROR,
-                None,
-                &json!({ "key": key, "upstream_id": params.upstream_id, "error": e.0 }),
-            );
-            return error(StatusCode::BAD_GATEWAY, &e.0);
-        }
-    };
-    let collected_at_unix = now_unix();
-    if let Err(e) = state.knowledge.upsert(&crate::storage::knowledge::NewCard {
-        key: key.clone(),
-        card_json: collected.card_json.clone(),
-        collected_at_unix,
-        generator: format!("{}/{}+websearch", cfg.provider_id, cfg.model),
-    }) {
-        return internal(&e.0);
-    }
-    crate::schedule::emit(
+    let collected = match crate::research::collect_card(
         &state,
-        event_kind::KNOWLEDGE_CARD,
-        None,
-        &json!({
-            "key": key,
-            "upstream_id": params.upstream_id,
-            "provider_id": params.provider_id,
-            "generator": format!("{}/{}", cfg.provider_id, cfg.model),
-        }),
-    );
+        &cfg,
+        &params.provider_id,
+        &params.upstream_id,
+        &key,
+    )
+    .await
+    {
+        Ok(collected) => collected,
+        Err(e) => return error(StatusCode::BAD_GATEWAY, &e),
+    };
     let entries = match knowledge_entries(&state, &key) {
         Ok(e) => e,
         Err(e) => return internal(&e),
@@ -1276,11 +1241,76 @@ pub async fn post_model_knowledge(
     ok_json(json!({
         "key": key,
         "collected": true,
-        "collected_at_unix": collected_at_unix,
+        "collected_at_unix": collected.collected_at_unix,
         "card": serde_json::from_str(&collected.card_json).unwrap_or(serde_json::Value::Null),
         "repairs": collected.repairs,
         "catalog_entries": entries,
     }))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ResearchPost {
+    /// Research fresh cards again; without it they are skipped.
+    #[serde(default)]
+    force: bool,
+}
+
+/// POST /v1/management/models/knowledge/research — research every model
+/// of the catalog on a background job. The answer is the job's first status.
+pub async fn post_model_research(
+    State(state): State<Arc<ApiState>>,
+    headers: HeaderMap,
+    Json(params): Json<ResearchPost>,
+) -> Response {
+    if let Some(reject) = authorize(&state, &headers) {
+        return reject;
+    }
+    match crate::research::start(&state, params.force) {
+        Ok(job) => ok_json(job.status()),
+        Err(crate::research::StartError::NotConfigured) => error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "knowledge collector is not configured",
+        ),
+        Err(crate::research::StartError::Running) => {
+            error(StatusCode::CONFLICT, "a research job is already running")
+        }
+        Err(crate::research::StartError::Empty) => {
+            bad_request("the catalog lists no models to research")
+        }
+        Err(crate::research::StartError::Unavailable(message)) => internal(&message),
+    }
+}
+
+/// GET /v1/management/models/knowledge/research — progress of the current
+/// or last job. Never starts anything.
+pub async fn get_model_research(
+    State(state): State<Arc<ApiState>>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(reject) = authorize(&state, &headers) {
+        return reject;
+    }
+    let status = crate::research::current(&state)
+        .map(|job| job.status())
+        .unwrap_or_else(|| crate::research::ResearchProgress::default().status());
+    ok_json(status)
+}
+
+/// DELETE /v1/management/models/knowledge/research — stop after the cards
+/// already in flight. Cards researched so far stay stored.
+pub async fn delete_model_research(
+    State(state): State<Arc<ApiState>>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(reject) = authorize(&state, &headers) {
+        return reject;
+    }
+    crate::research::cancel(&state);
+    ok_json(
+        crate::research::current(&state)
+            .map(|job| job.status())
+            .unwrap_or_else(|| crate::research::ResearchProgress::default().status()),
+    )
 }
 
 #[cfg(test)]
@@ -1654,6 +1684,78 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), 401);
+    }
+
+    #[tokio::test]
+    async fn catalog_reports_one_key_for_two_spellings_of_one_model() {
+        let st = state();
+        let listing = |upstream_id: &str| crate::storage::catalog::NewModel {
+            upstream_id: upstream_id.into(),
+            context_tokens: None,
+            observed_at_unix: 1,
+        };
+        {
+            let mut models = st.models.lock().unwrap();
+            models
+                .replace_snapshot(
+                    "tokenator",
+                    vec![listing("cursor-qwen-3.7-plus"), listing("cursor-hy4-flash")],
+                )
+                .unwrap();
+            models
+                .replace_snapshot(
+                    "alibaba",
+                    vec![listing("qwen3.7-plus"), listing("hy4flash")],
+                )
+                .unwrap();
+            models
+                .replace_snapshot(
+                    "opencode",
+                    vec![listing("qwen3.7-plus"), listing("hy4-flash-free")],
+                )
+                .unwrap();
+            models
+                .replace_snapshot("workbuddy", vec![listing("hy4flash-free")])
+                .unwrap();
+        }
+        let base = serve(&st).await;
+        let v: serde_json::Value = auth()
+            .get(format!("{base}/v1/management/models"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let key_of = |provider: &str, upstream_id: &str| -> String {
+            v["models"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|m| m["provider_id"] == provider && m["upstream_id"] == upstream_id)
+                .unwrap()["knowledge_key"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+        // The spelling most listings use names the model, whatever each
+        // provider wrote.
+        assert_eq!(key_of("tokenator", "cursor-qwen-3.7-plus"), "qwen3-7-plus");
+        assert_eq!(key_of("alibaba", "qwen3.7-plus"), "qwen3-7-plus");
+        assert_eq!(key_of("opencode", "qwen3.7-plus"), "qwen3-7-plus");
+        // A tie goes to the readable spelling, and it is the same on every read.
+        assert_eq!(key_of("tokenator", "cursor-hy4-flash"), "hy4-flash");
+        assert_eq!(key_of("alibaba", "hy4flash"), "hy4-flash");
+        assert_eq!(key_of("opencode", "hy4-flash-free"), "hy4-flash-free");
+        assert_eq!(key_of("workbuddy", "hy4flash-free"), "hy4-flash-free");
+        // A model nobody spells twice keeps its own key.
+        assert_eq!(
+            crate::model::catalog_keys(&["a-b".to_string(), "cd".to_string()]),
+            std::collections::HashMap::from([
+                ("ab".to_string(), "a-b".to_string()),
+                ("cd".to_string(), "cd".to_string())
+            ])
+        );
     }
 
     #[tokio::test]

@@ -1,46 +1,37 @@
-// Researched model cards: the hover surface used at every model id in the
-// dashboard, plus the structured views shared with the Wiki drawer.
-// Everything comes from the core's /v1/management/models/knowledge GET;
-// no provider is ever contacted from the browser.
+// The model preview that opens wherever a model id appears, and the small
+// pieces the Wiki and the preview share. Everything comes from the core's
+// knowledge endpoints; no provider is ever contacted from the browser.
 
-import {
-  Anchor,
-  Badge,
-  Box,
-  Button,
-  Group,
-  HoverCard,
-  Skeleton,
-  Stack,
-  Text,
-} from "@mantine/core";
-import {
-  IconAlertTriangle,
-  IconBolt,
-  IconBook,
-  IconCalendar,
-  IconCheck,
-  IconClock,
-  IconCoin,
-  IconCpu,
-  IconExternalLink,
-  IconSparkles,
-} from "@tabler/icons-react";
-import type { CSSProperties, ReactNode } from "react";
-import type { KnowledgeCard, ModelKnowledge } from "../api";
+import { HoverCard, Skeleton, Text } from "@mantine/core";
+import { IconArrowUpRight } from "@tabler/icons-react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
 import { contextWindow } from "../format";
+import { benchmarkOrder } from "../benchmarks";
+import { useClipped } from "../hooks";
+import { ensureKnowledge, useKnowledge } from "../model-knowledge";
 import {
-  useKnowledge,
-  ensureKnowledge,
-  type KnowledgeState,
-} from "../model-knowledge";
-import { safeHttpUrl, vendorColor } from "../model-key";
+  canonicalVendor,
+  parsePricing,
+  priceText,
+  scoresOf,
+  splitDescription,
+  tagsOf,
+  TAG_LABELS,
+  type CardLike,
+  type Tag,
+} from "../model-facts";
+import { vendorColor } from "../model-key";
 import { ProviderLogo } from "./provider-logo";
-import { RelTime } from "./ui";
+import { wikiLink } from "../wiki-catalog";
+import "./model-card.css";
 
-/// Wraps an inline model id with a research card. Only the text is the
-/// target, never a table row: a full-row target would swallow clicks and
-/// break the clickable history rows.
+export function openWiki(upstreamId: string) {
+  window.location.hash = wikiLink(upstreamId);
+}
+
+/// Wraps an inline model id with its research: hover shows a brief, click
+/// opens the dossier in the Wiki. Only the text is the target, never a table
+/// row: a full-row target would swallow the clicks of the row around it.
 export function ModelHoverCard({
   upstreamId,
   providerId,
@@ -52,505 +43,191 @@ export function ModelHoverCard({
   upstreamId: string | null | undefined;
   providerId?: string;
   children: ReactNode;
-  /// Fill the parent width. Use inside table cells and flex rows so a
-  /// truncated model id keeps its ellipsis.
+  /// Fill the parent width, so a truncated id keeps its ellipsis.
   block?: boolean;
   /// Extra layout rules for the target, e.g. flex: 1 in a dense row.
   style?: CSSProperties;
   position?: "bottom-start" | "bottom" | "top-start" | "right-start";
 }) {
   if (!upstreamId) return <>{children}</>;
+  const open = () => openWiki(upstreamId);
   return (
     <HoverCard
-      width="min(390px, calc(100vw - 24px))"
+      width="min(340px, calc(100vw - 24px))"
       events={{ hover: true, focus: true, touch: true }}
       position={position}
-      openDelay={220}
-      closeDelay={160}
-      shadow="xl"
-      radius="md"
+      openDelay={260}
+      closeDelay={180}
+      shadow="lg"
+      radius="lg"
       withArrow
       withinPortal
-      interactive
       role="dialog"
       zIndex={400}
       onOpen={() => ensureKnowledge(upstreamId)}
+      classNames={{ dropdown: "mcp" }}
     >
       <HoverCard.Target>
         <span
-          className={
-            block
-              ? "model-hover-target model-hover-block"
-              : "model-hover-target"
-          }
+          className={block ? "model-hover-target model-hover-block" : "model-hover-target"}
           tabIndex={0}
+          role="link"
           style={style}
-          aria-label={`model ${upstreamId}, show details`}
+          aria-label={`${upstreamId}: open in Model Wiki`}
+          onClick={(event) => {
+            // The row around may open something of its own; this click is ours.
+            event.stopPropagation();
+            open();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              event.stopPropagation();
+              open();
+            }
+          }}
         >
           {children}
         </span>
       </HoverCard.Target>
-      <HoverCard.Dropdown p={0} style={{ overflow: "hidden" }}>
-        <HoverBody upstreamId={upstreamId} providerId={providerId} />
+      <HoverCard.Dropdown p={0}>
+        <ModelBrief upstreamId={upstreamId} providerId={providerId} />
       </HoverCard.Dropdown>
     </HoverCard>
   );
 }
 
-function HoverBody({
-  upstreamId,
-  providerId,
-}: {
-  upstreamId: string;
-  providerId?: string;
-}) {
+function ModelBrief({ upstreamId, providerId }: { upstreamId: string; providerId?: string }) {
   const state = useKnowledge(upstreamId);
-  const data = state.data,
-    card = data?.card;
-  const providers = [
-    ...new Set(data?.catalog_entries.map((e) => e.provider_id) ?? []),
-  ].sort();
-  const rating = card?.ratings?.[0];
+  const data = state.data;
+  const card: CardLike | null = data?.card ?? null;
+  const providers = [...new Set(data?.catalog_entries.map((entry) => entry.provider_id) ?? [])].sort();
+  const tags = card ? tagsOf(card, card.use_cases?.[0]) : [];
+  // The brief leads with the most familiar benchmark the card was scored on.
+  const scores = scoresOf(card?.ratings, card?.vendor);
+  const top = [...scores.values()].sort(
+    (a, b) =>
+      benchmarkOrder(a.benchmark.id) - benchmarkOrder(b.benchmark.id) ||
+      Number(a.benchmark.variant !== null) - Number(b.benchmark.variant !== null),
+  )[0];
+  const pricing = card ? parsePricing(card) : null;
   return (
-    <div className="wiki-preview">
-      <div className="wiki-preview-scroll">
-        <span className="wiki-kicker">
-          <IconBook size={13} /> Model brief
-        </span>
-        <h3>{card?.canonical_name || upstreamId}</h3>
-        {card?.canonical_name && <code>{upstreamId}</code>}
-        <Group mt={6} gap={5}>
+    <div className="mcp">
+      <div className="mcp-body" onClick={() => openWiki(upstreamId)}>
+        <div className="mcp-head">
+          <Text component="strong" className="mcp-name">
+            {card?.canonical_name || upstreamId}
+          </Text>
           <VendorBadge vendor={card?.vendor} />
-          {data && <CardStatusBadge state={state} />}
-        </Group>
+        </div>
+        {card && <p className="mcp-tagline">{splitDescription(card).lead}</p>}
         {state.loading && !data && (
-          <Stack gap={5} mt="sm" aria-label="Reading research card">
-            <Skeleton height={9} />
-            <Skeleton height={9} width="75%" />
+          <Stack gap={6}>
+            <Skeleton height={10} width="86%" />
+            <Skeleton height={10} width="62%" />
           </Stack>
         )}
-        {state.error ? (
-          <p>
-            Research unavailable.{" "}
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              onClick={() => ensureKnowledge(upstreamId, true)}
-            >
-              Retry card
-            </Button>
-          </p>
-        ) : (
-          data && (
-            <>
-              <p className="wiki-preview-description">
-                {card?.description ||
-                  (card
-                    ? "No description on file."
-                    : "No research card yet. The catalog listings below are still useful.")}
-              </p>
-              {card && <MetaChips card={card} limit={2} />}
-              {rating && (
-                <div className="wiki-preview-score">
-                  <div>
-                    <small>Reported benchmark</small>
-                    <strong>{rating.metric}</strong>
-                    <span>
-                      {rating.source}
-                      {rating.as_of && " · " + rating.as_of}
-                    </span>
-                  </div>
-                  <b>{rating.value}</b>
-                </div>
-              )}
-            </>
-          )
+        {state.error && <p className="mcp-note">Research unavailable. The Wiki has the listings.</p>}
+        {data && !card && !state.error && (
+          <p className="mcp-note">No research card yet. The Wiki has the listings and can research it.</p>
         )}
-        {data ? (
-          <div className="wiki-preview-routes">
-            <small>Listed by · {providers.length}</small>
-            {providers.length ? (
-              <ProviderLabels providers={providers} limit={5} />
-            ) : (
-              <Text size="xs" c="dimmed">
-                No current catalog listing
-              </Text>
+        {card && (
+          <div className="mcp-facts">
+            {pricing?.input != null && pricing.output != null && (
+              <Fact label="Price / 1M">
+                {priceText(pricing.input, pricing.currency)} → {priceText(pricing.output, pricing.currency)}
+              </Fact>
+            )}
+            {!!card.context_window && (
+              <Fact label="Context">{contextWindow(card.context_window)}</Fact>
+            )}
+            {card.license && <Fact label="License">{card.license}</Fact>}
+            {top && (
+              <Fact label={top.benchmark.label}>
+                <b>{top.rating.value}</b>
+              </Fact>
             )}
           </div>
-        ) : (
-          providerId && (
-            <Text size="xs" c="dimmed">
-              Viewed on {providerId}
-            </Text>
-          )
+        )}
+        {tags.length > 0 && (
+          <div className="mcp-tags">
+            {tags.slice(0, 5).map((tag) => (
+              <span key={tag} className="tag">
+                {TAG_LABELS[tag as Tag]}
+              </span>
+            ))}
+          </div>
         )}
       </div>
-      <footer>
-        <Text size="xs" c="dimmed">
-          {data?.collected_at_unix ? (
-            <>
-              <RelTime unix={data.collected_at_unix} /> · researched
-            </>
-          ) : (
-            "Local reference"
-          )}
-        </Text>
-        <WikiButton upstreamId={upstreamId} />
-      </footer>
+      {data && (
+        <div className="mcp-foot">
+          <ProviderLabels providers={providers} fallback={providerId} limit={3} line="one" />
+          <span className="mcp-open">
+            Open in Wiki <IconArrowUpRight size={13} />
+          </span>
+        </div>
+      )}
     </div>
+  );
+}
+
+function Stack({ gap, children }: { gap: number; children: ReactNode }) {
+  return (
+    <div style={{ display: "grid", gap, marginTop: 10 }} aria-label="Reading research card">
+      {children}
+    </div>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <span className="mcp-fact">
+      <small>{label}</small>
+      <span>{children}</span>
+    </span>
   );
 }
 
 export function ProviderLabels({
   providers,
   limit,
+  fallback,
+  line = "wrap",
 }: {
   providers: string[];
   limit: number;
+  /// What to say when the catalog lists the model nowhere right now.
+  fallback?: string;
+  /// "one" is a row of a fixed width: what does not fit fades out there,
+  /// and only then.
+  line?: "wrap" | "one";
 }) {
+  const set = useRef<HTMLSpanElement>(null);
+  const clipped = useClipped(set);
+  if (!providers.length)
+    return fallback ? <span className="mcp-note">Viewed on {fallback}</span> : null;
   return (
-    <div className="wiki-labels">
-      {providers.slice(0, limit).map((p) => (
-        <span key={p}>
-          <ProviderLogo providerId={p} size={13} />
-          {p}
-        </span>
-      ))}
-      {providers.length > limit && (
-        <span>+{providers.length - limit} more</span>
-      )}
-    </div>
+    <span className="provider-labels" data-line={line} data-clipped={line === "one" && clipped ? "" : undefined}>
+      <span className="provider-label-set" ref={set}>
+        {providers.slice(0, limit).map((provider) => (
+          <span key={provider} className="provider-label">
+            <ProviderLogo providerId={provider} size={13} />
+            {provider}
+          </span>
+        ))}
+      </span>
+      {providers.length > limit && <span className="provider-more">+{providers.length - limit}</span>}
+    </span>
   );
 }
 
-export function WikiButton({ upstreamId }: { upstreamId: string }) {
-  return (
-    <Button
-      component="a"
-      href={`#/wiki?model=${encodeURIComponent(upstreamId)}`}
-      variant="light"
-      size="compact-xs"
-      rightSection={<IconBook size={13} />}
-      onClick={(e) => e.stopPropagation()}
-    >
-      Open in Wiki
-    </Button>
-  );
-}
-
-/// One card state for a Wiki tile: fresh, stale, missing, loading or failed.
-export function CardStatusBadge({ state }: { state: KnowledgeState }) {
-  if (state.loading || (!state.error && !state.data))
-    return (
-      <Badge size="xs" variant="light" color="blue">
-        loading
-      </Badge>
-    );
-  if (state.error)
-    return (
-      <Badge size="xs" variant="light" color="red">
-        error
-      </Badge>
-    );
-  if (!state.data?.card)
-    return (
-      <Badge size="xs" variant="default" color="gray">
-        no card
-      </Badge>
-    );
-  if (state.data.fresh) {
-    return (
-      <Badge
-        size="xs"
-        variant="light"
-        color="teal"
-        leftSection={<IconSparkles size={10} />}
-      >
-        fresh
-      </Badge>
-    );
-  }
-  return (
-    <Badge
-      size="xs"
-      variant="light"
-      color="orange"
-      leftSection={<IconClock size={10} />}
-    >
-      stale
-    </Badge>
-  );
-}
-
+/// The vendor as one badge, whatever spelling the researcher used.
 export function VendorBadge({ vendor }: { vendor: string | null | undefined }) {
-  if (!vendor) return null;
+  const name = canonicalVendor(vendor);
+  if (!name) return null;
   return (
-    <Badge size="xs" variant="light" color={vendorColor(vendor)} tt="none">
-      {vendor}
-    </Badge>
-  );
-}
-
-/// Compact metadata chips used on hover cards and Wiki tiles.
-export function MetaChips({
-  card,
-  limit,
-}: {
-  card: KnowledgeCard;
-  limit?: number;
-}) {
-  const chips: { icon: ReactNode; label: string; color: string }[] = [];
-  if (card.context_window) {
-    chips.push({
-      icon: <IconCpu size={11} />,
-      label: `${contextWindow(card.context_window)} ctx`,
-      color: "blue",
-    });
-  }
-  if (card.modality) {
-    chips.push({
-      icon: <IconBolt size={11} />,
-      label: card.modality,
-      color: "cyan",
-    });
-  }
-  if (card.release_date) {
-    chips.push({
-      icon: <IconCalendar size={11} />,
-      label: card.release_date,
-      color: "grape",
-    });
-  }
-  if (card.pricing_hint) {
-    chips.push({
-      icon: <IconCoin size={11} />,
-      label:
-        card.pricing_hint.length > 34
-          ? `${card.pricing_hint.slice(0, 33)}…`
-          : card.pricing_hint,
-      color: "yellow",
-    });
-  }
-  const shown = limit ? chips.slice(0, limit) : chips;
-  if (shown.length === 0) return null;
-  return (
-    <Group gap={4} wrap="wrap">
-      {shown.map((chip) => (
-        <Badge
-          key={chip.label}
-          size="xs"
-          variant="light"
-          color={chip.color}
-          tt="none"
-          leftSection={chip.icon}
-        >
-          {chip.label}
-        </Badge>
-      ))}
-    </Group>
-  );
-}
-
-export function ModelCardBody({
-  data,
-  providerId,
-}: {
-  data: ModelKnowledge;
-  providerId?: string;
-}) {
-  const card = data.card;
-  if (!card) return null;
-  const title = card.canonical_name ?? data.key;
-  return (
-    <Stack gap="sm">
-      <Box>
-        <Group gap={6} wrap="nowrap" align="center">
-          {providerId && <ProviderLogo providerId={providerId} size={20} />}
-          <Text fw={600} size="md" truncate style={{ minWidth: 0 }}>
-            {title}
-          </Text>
-          <CardStatusBadge state={{ data, error: null, loading: false }} />
-        </Group>
-        <Group gap={4} mt={4} wrap="wrap">
-          <VendorBadge vendor={card.vendor} />
-          <Badge size="xs" variant="default" tt="lowercase" ff="monospace">
-            {data.key}
-          </Badge>
-          {data.catalog_entries.length > 1 && (
-            <Badge size="xs" variant="light" color="blue" tt="none">
-              {data.catalog_entries.length} aliases
-            </Badge>
-          )}
-        </Group>
-      </Box>
-
-      <Text size="xs" style={{ lineHeight: 1.45 }}>
-        {card.description}
-      </Text>
-
-      <MetaChips card={card} />
-
-      {card.family_line && (
-        <Text size="xs" c="dimmed" style={{ lineHeight: 1.45 }}>
-          <b>Family</b> · {card.family_line}
-        </Text>
-      )}
-
-      <CardLists card={card} />
-
-      {card.ratings.length > 0 && (
-        <Box>
-          <SectionLabel>ratings</SectionLabel>
-          <Stack gap={6} mt={4}>
-            {card.ratings.map((rating, index) => (
-              <RatingRow
-                key={`${rating.source}-${rating.metric}-${index}`}
-                rating={rating}
-              />
-            ))}
-          </Stack>
-        </Box>
-      )}
-
-      {card.sources.length > 0 && (
-        <Box>
-          <SectionLabel>sources · {card.sources.length}</SectionLabel>
-          <Stack gap={3} mt={4}>
-            {card.sources.map((source) => {
-              const url = safeHttpUrl(source);
-              return url ? (
-                <Anchor
-                  key={source}
-                  href={url}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  size="11px"
-                  c="dimmed"
-                  className="wrap-anywhere"
-                >
-                  <Group gap={4} wrap="nowrap" align="flex-start">
-                    <IconExternalLink
-                      size={11}
-                      style={{ flexShrink: 0, marginTop: 2 }}
-                    />
-                    <span>{source}</span>
-                  </Group>
-                </Anchor>
-              ) : (
-                <Text
-                  key={source}
-                  size="11px"
-                  c="dimmed"
-                  className="wrap-anywhere"
-                >
-                  {source}
-                </Text>
-              );
-            })}
-          </Stack>
-        </Box>
-      )}
-
-      {card.pricing_hint && (
-        <Box>
-          <SectionLabel>pricing</SectionLabel>
-          <Text size="xs" mt={4} style={{ lineHeight: 1.45 }}>
-            {card.pricing_hint}
-          </Text>
-        </Box>
-      )}
-    </Stack>
-  );
-}
-
-function RatingRow({ rating }: { rating: KnowledgeCard["ratings"][number] }) {
-  return (
-    <div className="wiki-preview-score">
-      <div>
-        <strong>{rating.metric}</strong>
-        <span>
-          {rating.source}
-          {rating.as_of && " · " + rating.as_of}
-        </span>
-        {rating.note && <span>{rating.note}</span>}
-      </div>
-      <b>{rating.value}</b>
-    </div>
-  );
-}
-
-export function SectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <Text
-      size="11px"
-      c="dimmed"
-      tt="uppercase"
-      fw={600}
-      style={{ letterSpacing: 0.5 }}
-    >
-      {children}
-    </Text>
-  );
-}
-
-function CardLists({ card, limit }: { card: KnowledgeCard; limit?: number }) {
-  const lists: {
-    label: string;
-    items: string[];
-    color: string;
-    icon: ReactNode;
-  }[] = [
-    {
-      label: "strengths",
-      items: card.strengths,
-      color: "teal",
-      icon: <IconCheck size={11} />,
-    },
-    {
-      label: "weaknesses",
-      items: card.weaknesses,
-      color: "orange",
-      icon: <IconAlertTriangle size={11} />,
-    },
-    {
-      label: "use cases",
-      items: card.use_cases,
-      color: "blue",
-      icon: <IconBolt size={11} />,
-    },
-  ];
-  const shown = lists.filter((list) => list.items.length > 0);
-  if (shown.length === 0) return null;
-  return (
-    <Group gap="md" align="flex-start" wrap="wrap">
-      {shown.map((list) => (
-        <Box key={list.label} style={{ flex: "1 1 160px", minWidth: 0 }}>
-          <SectionLabel>{list.label}</SectionLabel>
-          <Stack gap={3} mt={4}>
-            {(limit ? list.items.slice(0, limit) : list.items).map(
-              (item, index) => (
-                <Group
-                  key={`${list.label}-${index}`}
-                  gap={5}
-                  wrap="nowrap"
-                  align="flex-start"
-                >
-                  <Box
-                    c={`var(--mantine-color-${list.color}-5)`}
-                    mt={2}
-                    style={{ flexShrink: 0 }}
-                  >
-                    {list.icon}
-                  </Box>
-                  <Text size="11px" style={{ lineHeight: 1.4 }}>
-                    {item}
-                  </Text>
-                </Group>
-              ),
-            )}
-          </Stack>
-        </Box>
-      ))}
-    </Group>
+    <span className="vendor-badge" data-color={vendorColor(vendor)} title={vendor && vendor !== name ? vendor : undefined}>
+      {name}
+    </span>
   );
 }

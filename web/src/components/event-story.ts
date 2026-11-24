@@ -99,3 +99,33 @@ export function eventStory(event: EventRecord) {
   }
   return { title, note, pool, model };
 }
+
+export type FeedItem = { event: EventRecord } | { cards: EventRecord[] };
+
+/// The newest event an item stands for.
+export function headOf(item: FeedItem): EventRecord {
+  return "event" in item ? item.event : item.cards[0];
+}
+
+/// The feed with each run of card updates kept together. A research run
+/// writes one card after another; from `from` in a row they are one item,
+/// so the router's own events stay in sight.
+export function foldCards(events: EventRecord[], from: number): FeedItem[] {
+  const items: FeedItem[] = [];
+  for (let index = 0; index < events.length; ) {
+    if (events[index].kind !== "knowledge_card") {
+      items.push({ event: events[index] });
+      index += 1;
+      continue;
+    }
+    let end = index;
+    while (end < events.length && events[end].kind === "knowledge_card") end += 1;
+    if (end - index < from) {
+      for (; index < end; index++) items.push({ event: events[index] });
+    } else {
+      items.push({ cards: events.slice(index, end) });
+      index = end;
+    }
+  }
+  return items;
+}
