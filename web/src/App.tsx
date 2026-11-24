@@ -4,6 +4,7 @@ import {
   IconActivity,
   IconArrowsExchange,
   IconBook,
+  IconCalendarTime,
   IconChartArea,
   IconGauge,
   IconHistory,
@@ -21,6 +22,7 @@ import { WorkspaceChrome } from "./components/workspace-chrome";
 import { usePoll, useRoute, useTitle, type Resource, type Route } from "./hooks";
 import { ActivityPage } from "./pages/activity";
 import { BalancesPage } from "./pages/balances";
+import { LimitsPage } from "./pages/limits";
 import { HistoryPage } from "./pages/history";
 import { OverviewPage } from "./pages/overview";
 import { PoolsPage } from "./pages/pools";
@@ -39,6 +41,7 @@ const NAV: { route: Route; label: string; icon: typeof IconLayoutDashboard }[] =
     { route: "overview", label: "Overview", icon: IconLayoutDashboard },
     { route: "usage", label: "Usage", icon: IconChartArea },
     { route: "balances", label: "Balances", icon: IconGauge },
+    { route: "limits", label: "Limits", icon: IconCalendarTime },
     { route: "providers", label: "Providers", icon: IconPlugConnected },
     { route: "pools", label: "Pools", icon: IconStack2 },
     { route: "history", label: "Requests", icon: IconHistory },
@@ -53,6 +56,7 @@ const TITLES: Record<Route, string> = {
   overview: "Overview",
   usage: "Usage",
   balances: "Balances",
+  limits: "Limits",
   providers: "Providers",
   pools: "Pools",
   history: "Requests",
@@ -274,6 +278,7 @@ function Dashboard({ lock }: { lock: () => void }) {
             {route === "pools" && <PoolsPage />}
             {route === "history" && <HistoryPage />}
             {route === "balances" && <BalancesPage />}
+            {route === "limits" && <LimitsPage />}
             {route === "activity" && <ActivityPage />}
             {route === "wiki" && <WikiPage />}
             {route === "chat" && (

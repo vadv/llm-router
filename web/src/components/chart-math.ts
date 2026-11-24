@@ -2,7 +2,14 @@
 // the stacking can be tested without a browser.
 
 export type Point = { unix: number; value: number | null };
-export type Series = { label: string; color: string; points: Point[] };
+/// `dashed` draws a forecast: a line from where the readings end, without
+/// the fill a measured series has.
+export type Series = {
+  label: string;
+  color: string;
+  points: Point[];
+  dashed?: boolean;
+};
 
 export type Frame = {
   /// Every timestamp of every series, sorted. A series without a point at a

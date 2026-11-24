@@ -113,6 +113,16 @@ export function dateLabel(date: string | null | undefined): string {
 }
 
 /// A score as the card wrote it: 92, 84.5, 0.039.
+/// A moment in a sentence: "Dec 3", with the time when it is near. The
+/// full date with seconds would crowd a line that also names a pace.
+export function dayTime(unixSeconds: number, now: number): string {
+  const date = new Date(unixSeconds * 1000);
+  const otherYear = date.getFullYear() !== new Date(now * 1000).getFullYear();
+  const day = `${MONTHS[date.getMonth()]} ${date.getDate()}${otherYear ? ` ${date.getFullYear()}` : ""}`;
+  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return Math.abs(unixSeconds - now) < 48 * 3600 ? `${day}, ${time}` : day;
+}
+
 export function scoreText(value: number): string {
   if (Number.isInteger(value)) return value.toLocaleString("en-US");
   return value.toFixed(Math.abs(value) < 1 ? 3 : Math.abs(value) < 10 ? 2 : 1);

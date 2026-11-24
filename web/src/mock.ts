@@ -728,8 +728,9 @@ export const mockApi: Api = {
   observations: (providerId) =>
     wait(providerId ? observations.filter((row) => row.provider_id === providerId) : observations),
 
-  // The mock has no stored series, so it reports a ramp that ends at the
-  // value shown on the card. It keeps the charts visible in previews.
+  // The mock has no stored series, so it reports a day of readings that
+  // falls toward the value shown on the card, never above the limit: the
+  // Limits page reads a pace from it, as from a stored series.
   observationHistory: (query) => {
     const limit = query.limit ?? 500;
     const rows = observations
@@ -740,9 +741,13 @@ export const mockApi: Api = {
       .filter((row) => query.unit === undefined || (row.unit ?? "") === query.unit);
     const points = rows.flatMap((row) =>
       Array.from({ length: Math.min(24, limit) }, (_, index) => {
-        const share = 0.62 + index * 0.016; // older points left more of the window
-        const remaining = row.remaining === null ? null : String(Number(row.remaining) * share);
         const limitValue = row.limit === null ? null : Number(row.limit);
+        // A day of spend before the card's amount: a little over a quarter of it.
+        const spent = row.remaining === null ? 0 : Number(row.remaining) * (23 - index) * 0.012;
+        const remaining =
+          row.remaining === null
+            ? null
+            : String(limitValue === null ? Number(row.remaining) + spent : Math.min(limitValue, Number(row.remaining) + spent));
         return {
           ...row,
           remaining,

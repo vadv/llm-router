@@ -104,6 +104,14 @@ export function Chart({
     return segments.join(" ");
   });
 
+  // Where a series' own readings begin and end: a forecast drawn on after
+  // them must not stretch the fill under them into the future.
+  const ends = (row: number) => {
+    const known = values[row].flatMap((value, index) => (value === null ? [] : [xs[index]]));
+    return { from: known[0] ?? first, to: known.at(-1) ?? last };
+  };
+  const measured = series.filter((one) => !one.dashed).length;
+
   // Stable gradient IDs: series label sanitized.
   const gradId = (label: string) => `grad-${label.replace(/[^a-zA-Z0-9]/g, "")}`;
 
@@ -121,6 +129,26 @@ export function Chart({
     else if (event.key === "End") setHover(xs.length - 1);
     else if (event.key === "Home") setHover(0);
   };
+
+  // A label sits right of its line, or left of it when the right edge is
+  // near; labels that would overlap step down a line.
+  const labelRows: { from: number; to: number; row: number }[] = [];
+  const markerLabels = markers.map((marker) => {
+    const at = x(marker.unix);
+    const room = 9 * marker.label.length + 6;
+    const left = at > width - right - room;
+    const box = { from: left ? at - room : at, to: left ? at : at + room };
+    let row = 0;
+    while (labelRows.some((other) => other.row === row && other.from < box.to && other.to > box.from)) {
+      row += 1;
+    }
+    labelRows.push({ ...box, row });
+    return {
+      x: left ? at - 3 : at + 3,
+      y: top + 8 + row * 12,
+      anchor: (left ? "end" : "start") as "start" | "end",
+    };
+  });
 
   const hoverUnix = hover === null ? null : xs[hover];
   const tooltipLeft = hover === null ? 0 : Math.min(Math.max(x(xs[hover]) + 10, 4), width - 148);
@@ -226,7 +254,7 @@ export function Chart({
             </text>
           ))}
 
-          {markers.map((marker) =>
+          {markers.map((marker, index) =>
             marker.unix >= first && marker.unix <= last ? (
               <g key={`${marker.unix}-${marker.label}`}>
                 <line
@@ -240,8 +268,9 @@ export function Chart({
                   strokeOpacity={0.4}
                 />
                 <text
-                  x={x(marker.unix) + 3}
-                  y={top + 8}
+                  x={markerLabels[index].x}
+                  y={markerLabels[index].y}
+                  textAnchor={markerLabels[index].anchor}
                   fontSize={9}
                   fill="var(--mantine-color-dimmed)"
                 >
@@ -320,13 +349,20 @@ export function Chart({
                       />
                     </>
                   )}
-                  {zeroBased && !stacked && series.length === 1 && (
+                  {zeroBased && !stacked && !one.dashed && measured === 1 && (
                     <path
-                      d={`${linePaths[row]} L${x(last).toFixed(1)},${(top + plotHeight).toFixed(1)} L${x(first).toFixed(1)},${(top + plotHeight).toFixed(1)} Z`}
+                      d={`${linePaths[row]} L${x(ends(row).to).toFixed(1)},${(top + plotHeight).toFixed(1)} L${x(ends(row).from).toFixed(1)},${(top + plotHeight).toFixed(1)} Z`}
                       fill={`url(#${gradId(one.label)})`}
                     />
                   )}
-                  <path d={linePaths[row]} fill="none" stroke={one.color} strokeWidth={1.2} shapeRendering="geometricPrecision" />
+                  <path
+                    d={linePaths[row]}
+                    fill="none"
+                    stroke={one.color}
+                    strokeWidth={1.2}
+                    strokeDasharray={one.dashed ? "6 4" : undefined}
+                    shapeRendering="geometricPrecision"
+                  />
                 </g>
               ))}
 

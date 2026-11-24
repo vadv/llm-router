@@ -55,25 +55,6 @@
   margin-bottom: 0.8rem;
   break-inside: avoid;
 }
-.balance-facts {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 0.4rem 0.9rem;
-  margin: 0;
-  padding: 0.7rem 0.85rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--page);
-  font-size: 0.82rem;
-}
-.balance-facts dt {
-  color: var(--mantine-color-dimmed);
-}
-.balance-facts dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
 .balance-card,
 .balance-empty {
   min-width: 0;

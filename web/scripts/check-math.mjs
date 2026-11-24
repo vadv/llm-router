@@ -12,7 +12,7 @@ import {
 } from "../src/components/chart-math.ts";
 import { prepareCosts, makePivot, perMillion, amount, missing, calendarDay } from '../src/components/usage-pivot.ts';
 import { allocatedSpend, buildSeries, providerEstimates, errorPercent, rankGroups, sumBuckets, valueOf } from "../src/components/usage-math.ts";
-import { balanceRisk, balanceReading, burnPerDay, daysLeft, groupAmounts, readingGroups } from "../src/components/balance-math.ts";
+import { balanceRisk, balanceReading, groupAmounts, limitOutlook, outlookRank, pace, readingGroups } from "../src/components/balance-math.ts";
 import {
   groupByKnowledgeKey,
   splitModelGroup,
@@ -22,7 +22,7 @@ import {
 } from "../src/model-key.ts";
 
 import { overviewPeriod, poolCoverage, recentOutcomes, trafficHours } from "../src/components/overview-math.ts";
-import { compact, eta, money, tps } from "../src/format.ts";
+import { compact, dayTime, eta, money, tps } from "../src/format.ts";
 import { callTimeline } from "../src/components/request-timeline.ts";
 import { eventStory } from "../src/components/event-story.ts";
 import { poolSuggestions } from '../src/pool-suggestions.ts';
@@ -719,28 +719,134 @@ test("counters of one unit sum and give a fill percent", () => {
   assert.equal(percent, 25);
 });
 
-test("burn and forecast need a shrinking money series", () => {
-  const now = Math.floor(Date.now() / 1000);
-  const current = observation({ remaining: "10", observed_at_unix: now });
-  const history = [observation({ remaining: "20", observed_at_unix: now - 86_400 }), current];
-  assert.equal(burnPerDay(current, history), 10);
-  assert.equal(daysLeft(current, history), 1);
-  // A top-up is not a negative forecast.
-  const rising = [observation({ remaining: "5", observed_at_unix: now - 86_400 }), current];
-  assert.equal(daysLeft(current, rising), null);
-  // A five-minute sample must not become a confident yearly rate.
-  const brief = [observation({ remaining: "10.01", observed_at_unix: now - 300 }), current];
-  assert.equal(burnPerDay(current, brief), null);
-  assert.equal(daysLeft(current, brief), null);
-  // An hour of history shows the rate but not a "608 days left" guess.
-  const hour = [observation({ remaining: "10.4", observed_at_unix: now - 3600 }), current];
-  assert.ok(burnPerDay(current, hour) !== null);
-  assert.equal(daysLeft(current, hour), null);
-  // One point, a refillable window and a non-money metric give no forecast.
-  assert.equal(daysLeft(current, [current]), null);
-  assert.equal(daysLeft(observation({ window: "daily", remaining: "10" }), history), null);
-  // Credits are also a balance that can run out; the same trend applies.
-  assert.equal(burnPerDay(observation({ metric: "credits" }), history), 10);
+const HOUR = 3600;
+const DAY = 86_400;
+const near = (actual, expected) => Math.abs(actual - expected) < 1e-9;
+
+test("the pace is measured back to the last refill only", () => {
+  const now = 1_000_000_000;
+  const row = observation({ remaining: "10", observed_at_unix: now });
+  const at = (hours, left) =>
+    observation({ remaining: String(left), observed_at_unix: now - Math.round(hours * HOUR) });
+  const day = [at(24, 20), at(12, 15), row];
+  assert.deepEqual(pace(row, day), { perDay: 10, hours: 24 });
+  // A top-up is not a negative pace: measuring starts after it.
+  const toppedUp = [at(30, 5), at(24, 25), at(12, 17.5), row];
+  assert.deepEqual(pace(row, toppedUp), { perDay: 15, hours: 24 });
+  // A five-hour quota refilled six hours ago: only the current window counts.
+  const quota = observation({
+    metric: "credits",
+    unit: null,
+    limit: "100",
+    remaining: "40",
+    window: "5h",
+    resets_at_unix: now + 4 * HOUR,
+    observed_at_unix: now,
+  });
+  const windows = [at(11, 95), at(9, 60), at(6, 100), at(3, 70), quota];
+  assert.deepEqual(pace(quota, windows), { perDay: 240, hours: 6 });
+  // A few minutes of readings must not become a confident date.
+  assert.equal(pace(row, [at(5 / 60, 10.01), row]), null);
+  // Nothing spent, a series that is one top-up, and no series at all.
+  assert.equal(pace(row, [at(24, 10), row]).perDay, 0);
+  assert.equal(pace(row, [at(24, 5), row]), null);
+  assert.equal(pace(row, []), null);
+  // A rise within the jitter is not a refill, be it a correction or a request giving its share back.
+  assert.equal(pace(row, [at(24, 20), at(12, 14.9), at(10, 15), row]).hours, 24);
+  const small = observation({ metric: "requests", unit: null, limit: "30", remaining: "30", observed_at_unix: now });
+  assert.equal(pace(small, [at(24, 30), at(12, 29), at(6, 30), small]).perDay, 0);
+});
+
+test("the verdict says what runs out first, the amount or the window", () => {
+  const now = 1_000_000_000;
+  const row = observation({ remaining: "10", observed_at_unix: now });
+  const dayBefore = (left) =>
+    observation({ remaining: String(left), observed_at_unix: now - DAY });
+  const rate = [dayBefore(20), row]; // ten a day
+  const steady = { perDay: 10, hours: 24 };
+
+  // A balance with no reset to wait for lasts a day.
+  const balance = limitOutlook(row, rate, now);
+  assert.equal(balance.kind, "lasts");
+  assert.equal(balance.resetsAt, null);
+  assert.equal(balance.runsOutAt, now + DAY);
+  assert.ok(near(balance.pace.perDay, 10));
+
+  // A weekly quota that resets in two days is empty a day before.
+  const weekly = observation({
+    metric: "requests",
+    unit: null,
+    limit: "20",
+    remaining: "10",
+    window: "weekly",
+    resets_at_unix: now + 2 * DAY,
+    observed_at_unix: now,
+  });
+  const short = limitOutlook(weekly, rate, now);
+  assert.equal(short.kind, "short");
+  assert.equal(short.runsOutAt, now + DAY);
+  assert.equal(short.resetsAt, now + 2 * DAY);
+  assert.ok(near(short.shortfall, 10));
+
+  // At a quarter of that pace it lasts, with a quarter of the limit to spare.
+  const slow = limitOutlook(weekly, [dayBefore(12.5), weekly], now);
+  assert.equal(slow.kind, "lasts");
+  assert.ok(near(slow.spare, 5));
+  assert.ok(near(slow.spareShare, 0.25));
+  // Under a tenth of the limit left is still "lasts", but it ranks with the worries:
+  // 4.5 a day leaves 1 of 20 at the reset.
+  const tight = limitOutlook(weekly, [dayBefore(14.5), weekly], now);
+  assert.equal(tight.kind, "lasts");
+  assert.ok(tight.spareShare < 0.1);
+  assert.ok(outlookRank(tight) < outlookRank(slow));
+
+  // Empty, unreported, unread and untouched.
+  assert.deepEqual(limitOutlook(observation({ remaining: "0" }), rate, now), { kind: "exhausted", resetsAt: null });
+  assert.deepEqual(limitOutlook(observation({ limit: "10", usage: "10", remaining: null }), rate, now), {
+    kind: "exhausted",
+    resetsAt: null,
+  });
+  assert.deepEqual(limitOutlook(observation({ remaining: null, usage: "5" }), rate, now), { kind: "unknown", why: "amount", resetsAt: null });
+  assert.deepEqual(limitOutlook(row, [row], now), { kind: "unknown", why: "history", resetsAt: null });
+  assert.deepEqual(limitOutlook(row, [dayBefore(10), row], now), { kind: "quiet", resetsAt: null, hours: 24 });
+
+  // A reset that is already past is no reset to wait for.
+  const stale = limitOutlook({ ...row, window: "daily", resets_at_unix: now - 5 }, rate, now);
+  assert.equal(stale.kind, "lasts");
+  assert.equal(stale.resetsAt, null);
+
+  // A ratio reading is a quota in percent: half left, thirty points a day.
+  const ratio = observation({
+    metric: "ratio",
+    unit: null,
+    usage: "0.5",
+    remaining: null,
+    window: "monthly",
+    resets_at_unix: now + 10 * DAY,
+    observed_at_unix: now,
+  });
+  const percent = limitOutlook(ratio, [{ ...ratio, usage: "0.2", observed_at_unix: now - DAY }, ratio], now);
+  assert.equal(percent.kind, "short");
+  assert.ok(near(percent.shortfall, 250));
+
+  // Worst first: empty, short, running dry, tight, lasting, untouched, unknown.
+  const ranks = [
+    limitOutlook(observation({ remaining: "0" }), rate, now),
+    short,
+    balance,
+    tight,
+    slow,
+    limitOutlook(row, [dayBefore(10), row], now),
+    limitOutlook(row, [row], now),
+  ].map(outlookRank);
+  assert.deepEqual(ranks, [...ranks].sort((a, b) => a - b));
+});
+
+test("a date in a sentence is short, with the time when it is near", () => {
+  const now = new Date(2026, 10, 24, 15, 0).getTime() / 1000;
+  assert.equal(dayTime(now + 3 * DAY, now), "Nov 27");
+  assert.equal(dayTime(now + DAY, now), "Nov 25, 15:00");
+  assert.equal(dayTime(new Date(2027, 0, 2).getTime() / 1000, now), "Jan 2 2027");
 });
 
 test("balance risk marks exhausted and low snapshots", () => {

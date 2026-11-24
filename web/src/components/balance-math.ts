@@ -140,63 +140,126 @@ function finite(value: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-/// Amount spent per day, from the reported remaining amount. Needs two
-/// finite points; a rising series (a top-up) gives a negative rate, which
-/// is not a burn. The lookback is two days: with the request capped at 500
-/// points and a 10-minute schedule that is what the caller can deliver,
-/// and the forecast below needs a full day of measured change.
-function measuredWindow(
-  history: Observation[],
-  lookbackSec: number,
-): {
-  first: { unix: number; value: number };
-  last: { unix: number; value: number };
-  days: number;
-} | null {
-  const now = Math.floor(Date.now() / 1000);
-  const recent = history.flatMap((point) => {
-    const value = finite(point.remaining);
-    return value !== null && point.observed_at_unix >= now - lookbackSec
-      ? [{ unix: point.observed_at_unix, value }] : [];
-  });
-  if (recent.length < 2) return null;
-  const first = recent[0];
-  const last = recent[recent.length - 1];
-  const days = (last.unix - first.unix) / 86_400;
-  return days > 0 ? { first, last, days } : null;
+/// Amount spent per day, and over how many hours that was measured.
+export type Pace = {
+  perDay: number;
+  hours: number;
+};
+
+/// The pace of a reading, from how what is left changes over time. It is
+/// measured back to the last refill only: a reset or a top-up is a rise in
+/// what is left, and the fall before it belongs to a window that ended. A
+/// rise counts as a refill from a tenth of the limit (or of the most that
+/// was left): smaller ones are a request giving its share back. Needs an
+/// hour of readings: a few minutes would turn noise into a confident date.
+export function pace(row: Observation, history: Observation[]): Pace | null {
+  const points: { unix: number; left: number }[] = [];
+  for (const point of history) {
+    const left = balanceReading(point).left;
+    if (left !== null) points.push({ unix: point.observed_at_unix, left });
+  }
+  const last = points.at(-1);
+  if (!last) return null;
+  // A rise smaller than this is jitter, not a refill.
+  const jitter =
+    Math.max(balanceReading(row).limit ?? 0, ...points.map((point) => point.left)) * 0.1;
+  let first = points.length - 1;
+  for (let index = points.length - 2; index >= 0; index--) {
+    if (points[index].left < points[index + 1].left - jitter) break;
+    first = index;
+  }
+  const hours = (last.unix - points[first].unix) / 3600;
+  if (hours < 1) return null;
+  return { perDay: ((points[first].left - last.left) / hours) * 24, hours };
 }
 
-export function burnPerDay(
-  current: Observation,
+/// Whether what is left will last, at the measured pace. The same for a
+/// balance and for a quota: the question is what runs out first, the amount
+/// or the window.
+export type Outlook =
+  // Nothing left to spend.
+  | { kind: "exhausted"; resetsAt: number | null }
+  // It cannot be judged: no amount is reported, or there is less than an
+  // hour of readings since the last refill.
+  | { kind: "unknown"; why: "amount" | "history"; resetsAt: number | null }
+  // Nothing was spent over the measured hours.
+  | { kind: "quiet"; resetsAt: number | null; hours: number }
+  // At this pace it is empty before the reset. `shortfall` is what would
+  // be missing had the window lasted to its reset.
+  | { kind: "short"; pace: Pace; runsOutAt: number; resetsAt: number; shortfall: number }
+  // At this pace something is left at the reset, `spare` of it (`spareShare`
+  // of the limit), or, with no reset to wait for, it lasts until `runsOutAt`.
+  | {
+      kind: "lasts";
+      pace: Pace;
+      runsOutAt: number;
+      resetsAt: number | null;
+      spare: number | null;
+      spareShare: number | null;
+    };
+
+const DAY = 86_400;
+
+export function limitOutlook(
+  row: Observation,
   history: Observation[],
-): number | null {
-  if (
-    !["money", "credits"].includes(current.metric) ||
-    current.remaining === null
-  )
-    return null;
-  const window = measuredWindow(history, 2 * 24 * 3600);
-  if (window === null) return null;
-  // A few minutes of history extrapolate a cent of change into a confident
-  // yearly rate. Wait for an hour of observations before forecasting.
-  if (window.days < 1 / 24) return null;
-  return (window.first.value - window.last.value) / window.days;
+  now: number,
+): Outlook {
+  const { left, limit, percentLeft } = balanceReading(row);
+  const resetsAt =
+    row.resets_at_unix !== null && row.resets_at_unix > now
+      ? row.resets_at_unix
+      : null;
+  if (left === null) return { kind: "unknown", why: "amount", resetsAt };
+  if (left <= 0 || percentLeft === 0) return { kind: "exhausted", resetsAt };
+  const rate = pace(row, history);
+  if (rate === null) return { kind: "unknown", why: "history", resetsAt };
+  if (rate.perDay <= 0) {
+    return { kind: "quiet", resetsAt, hours: rate.hours };
+  }
+  const runsOutAt = now + (left / rate.perDay) * DAY;
+  if (resetsAt === null) {
+    return { kind: "lasts", pace: rate, runsOutAt, resetsAt: null, spare: null, spareShare: null };
+  }
+  if (runsOutAt < resetsAt) {
+    return {
+      kind: "short",
+      pace: rate,
+      runsOutAt,
+      resetsAt,
+      shortfall: ((resetsAt - runsOutAt) / DAY) * rate.perDay,
+    };
+  }
+  const spare = left - ((resetsAt - now) / DAY) * rate.perDay;
+  return {
+    kind: "lasts",
+    pace: rate,
+    runsOutAt,
+    resetsAt,
+    spare,
+    spareShare: limit !== null && limit > 0 ? Math.max(0, spare / limit) : null,
+  };
 }
 
-/// "How long does the current amount last at the current burn rate?"
-/// The forecast is for money only: a window counter refills itself.
-export function daysLeft(
-  current: Observation,
-  history: Observation[],
-): number | null {
-  if (current.window === "daily") return null;
-  const burn = burnPerDay(current, history);
-  const left = finite(current.remaining);
-  if (burn === null || burn <= 0 || left === null) return null;
-  // "608 days left" from one hour of history is a guess dressed as a number.
-  // The rate must be measured over a full day of finite observations, not
-  // merely spanned by records with unknown amounts at the ends.
-  const window = measuredWindow(history, 2 * 24 * 3600);
-  if (window === null || window.days < 1) return null;
-  return left / burn;
+/// The order of the Limits page: what is empty, what will not last, what
+/// runs dry next, then what lasts. Within a class the sooner comes first.
+/// Unknown readings come last: nothing can be said of them.
+export function outlookRank(outlook: Outlook): number {
+  const at = (group: number, unix: number) => group * 1e11 + unix;
+  switch (outlook.kind) {
+    case "exhausted":
+      return 0;
+    case "short":
+      return at(1, outlook.runsOutAt);
+    case "lasts":
+      if (outlook.resetsAt === null) return at(2, outlook.runsOutAt);
+      return at(outlook.spareShare !== null && outlook.spareShare < 0.1 ? 3 : 4, outlook.resetsAt);
+    case "quiet":
+      return 5e11;
+    case "unknown":
+      return 6e11;
+  }
 }
+
+/// Too little would be left at the reset for the verdict to read as a calm one.
+export const TIGHT_SPARE = 0.1;

@@ -130,6 +130,7 @@ export const ROUTES = [
   "overview",
   "usage",
   "balances",
+  "limits",
   "providers",
   "pools",
   "history",

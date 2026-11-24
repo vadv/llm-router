@@ -1,0 +1,252 @@
+/* Limits: one line per balance and quota, the verdict first. The row is
+   marked at its left edge by how it stands, as a call in flight is in the
+   log. */
+.limit-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  overflow: hidden;
+}
+.limit-row,
+.limit-detail {
+  --tone: var(--mantine-color-teal-6);
+}
+.limit-row[data-tone="short"],
+.limit-row[data-tone="off"],
+.limit-detail[data-tone="short"],
+.limit-detail[data-tone="off"] {
+  --tone: var(--mantine-color-red-6);
+}
+.limit-row[data-tone="tight"],
+.limit-detail[data-tone="tight"] {
+  --tone: var(--mantine-color-orange-6);
+}
+.limit-row[data-tone="drain"],
+.limit-detail[data-tone="drain"] {
+  --tone: var(--mantine-color-yellow-6);
+}
+.limit-row[data-tone="none"],
+.limit-detail[data-tone="none"] {
+  --tone: var(--mantine-color-gray-6);
+}
+.limit-row {
+  box-shadow: inset 3px 0 0 var(--tone);
+}
+.limit-row + .limit-row {
+  border-top: 1px solid var(--line);
+}
+.limit-row-toggle {
+  display: grid;
+  grid-template-columns:
+    minmax(11rem, 1.3fr) minmax(9rem, 1fr) minmax(7rem, 0.7fr)
+    minmax(15rem, 2.1fr) 14px;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.75rem 0.95rem;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+@media (hover: hover) {
+  .limit-row-toggle:hover {
+    background: var(--mantine-color-default-hover);
+  }
+}
+.limit-who {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.limit-names {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.limit-names b {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.limit-resource {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.75rem;
+  color: var(--mantine-color-dimmed);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.limit-window {
+  flex: none;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+.limit-left {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: start;
+  min-width: 0;
+}
+.limit-left strong {
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.limit-left small,
+.limit-pace small {
+  font-size: 0.72rem;
+  color: var(--mantine-color-dimmed);
+}
+.limit-meter {
+  display: block;
+  width: 100%;
+  max-width: 9rem;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--mantine-color-default-border);
+  overflow: hidden;
+}
+.limit-meter > i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--tone);
+}
+.limit-pace {
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.limit-pace small {
+  display: block;
+}
+.limit-verdict {
+  min-width: 0;
+}
+.limit-verdict b {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+/* A verdict that asks for something is written in its colour; a calm one
+   stays in the text colour. */
+.limit-row[data-tone="short"] .limit-verdict b,
+.limit-row[data-tone="off"] .limit-verdict b,
+.limit-row[data-tone="tight"] .limit-verdict b,
+.limit-row[data-tone="drain"] .limit-verdict b {
+  color: var(--tone);
+}
+.limit-verdict span {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--mantine-color-dimmed);
+  overflow-wrap: anywhere;
+}
+.limit-chevron {
+  color: var(--mantine-color-dimmed);
+  transition: transform 120ms ease;
+}
+.limit-row-toggle[aria-expanded="true"] .limit-chevron {
+  transform: rotate(180deg);
+}
+/* The readings with nothing spent wait behind one line, so the few that
+   need attention stay in view. */
+.limit-fold {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.7rem 0.95rem 0.7rem 1.2rem;
+  border: 0;
+  background: none;
+  color: var(--mantine-color-dimmed);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+}
+.limit-fold[aria-expanded="true"] .limit-chevron {
+  transform: rotate(180deg);
+}
+@media (hover: hover) {
+  .limit-fold:hover {
+    color: var(--ink);
+    background: var(--mantine-color-default-hover);
+  }
+}
+.limit-detail {
+  padding: 0.7rem 0.95rem 1rem;
+  border-top: 1px solid var(--line);
+  background: var(--page);
+}
+.limit-verdict-line {
+  margin: 0 0 0.7rem;
+  font-size: 0.85rem;
+}
+.limit-verdict-line b {
+  color: var(--tone);
+}
+.limit-verdict-line span {
+  color: var(--mantine-color-dimmed);
+}
+.limit-detail .balance-facts {
+  margin-bottom: 0.8rem;
+}
+.limit-note {
+  margin: 0 0 0.7rem;
+  font-size: 0.78rem;
+  color: var(--mantine-color-red-6);
+}
+.balance-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.4rem 0.9rem;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 0.82rem;
+}
+.balance-facts dt {
+  color: var(--mantine-color-dimmed);
+}
+.balance-facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 64em) {
+  .limit-row-toggle {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  }
+  .limit-pace {
+    grid-column: 2;
+  }
+  .limit-verdict {
+    grid-column: 1 / -1;
+  }
+  .limit-chevron {
+    display: none;
+  }
+}
+@media (max-width: 40em) {
+  .limit-row-toggle {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem 0.9rem;
+  }
+  .limit-who,
+  .limit-verdict {
+    grid-column: 1 / -1;
+  }
+}
