@@ -335,11 +335,14 @@ fn billing_query(now_unix: i64) -> Value {
     })
 }
 
-/// Parse the meter answer into one aggregate credit indicator. Packages with
-/// nothing left (spent bonus packs, status 3) drop out; monthly packs
-/// (CapacityType 4) count even at zero, matching the community client's
-/// arithmetic. `usage` is the account's lifetime spend, `remaining` the sum
-/// of live packages, `resets_at_unix` the earliest end among them.
+/// Parse the meter answer into one aggregate credit indicator. A pack of a
+/// cycle (a subscription, CapacityType 2; a monthly pack, 4) counts even at
+/// zero: it is what refills, so its end is the reset to wait for and its
+/// size the limit. A one-shot pack (a bonus pack) counts while it has
+/// something left; a spent one drops out. `usage` is what the cycle packs
+/// used of their size, or the account's lifetime spend when the meter names
+/// no size; `remaining` is the sum of what is counted, `resets_at_unix` the
+/// earliest end among it.
 fn parse_credits(value: &Value) -> Result<Vec<Indicator>, String> {
     match value.get("code").and_then(Value::as_i64) {
         Some(0) => {}
@@ -352,22 +355,30 @@ fn parse_credits(value: &Value) -> Result<Vec<Indicator>, String> {
         .ok_or_else(|| "meter_missing_accounts".to_owned())?;
     let mut remaining: i64 = 0;
     let mut any_live = false;
+    let mut cycle_size: Option<i64> = None;
+    let mut cycle_used: i64 = 0;
     let mut resets_at_unix: Option<i64> = None;
     for account in accounts {
         let field = |name: &str| account.get(name).and_then(Value::as_i64);
-        let monthly = field("CapacityType") == Some(4);
+        let cyclic = matches!(field("CapacityType"), Some(2 | 4));
         // The cycle fields are absent on one-shot packs; then the plain
         // capacity is the truth.
-        let left = field("CycleCapacityRemain").or_else(|| field("CapacityRemain"));
-        let Some(left) = left else {
-            return Err("meter_account_without_remain".into());
-        };
+        let left = field("CycleCapacityRemain")
+            .or_else(|| field("CapacityRemain"))
+            .ok_or_else(|| "meter_account_without_remain".to_owned())?;
         let left = left.max(0);
-        if !monthly && left == 0 {
+        if left == 0 && !cyclic {
             continue;
         }
         any_live = true;
         remaining += left;
+        if cyclic {
+            let size = field("CycleCapacitySize").or_else(|| field("CapacitySize"));
+            cycle_size = Some(cycle_size.unwrap_or(0) + size.unwrap_or(0));
+            cycle_used += field("CycleCapacityUsed")
+                .or_else(|| field("CapacityUsed"))
+                .unwrap_or(0);
+        }
         if let Some(end) = field("DeductionEndTime") {
             let end = end / 1000;
             resets_at_unix = Some(match resets_at_unix {
@@ -376,6 +387,12 @@ fn parse_credits(value: &Value) -> Result<Vec<Indicator>, String> {
             });
         }
     }
+    // The cycle's size and spend are the limit and the usage when the meter
+    // reports them; otherwise the account's lifetime spend stands as before.
+    let (limit, usage) = match (cycle_size, usage_of(value)) {
+        (Some(size), _) if size > 0 => (Some(size.to_string()), Some(cycle_used.to_string())),
+        _ => (None, usage_of(value)),
+    };
     if !any_live {
         return Ok(vec![Indicator {
             resource: "account".into(),
@@ -392,8 +409,8 @@ fn parse_credits(value: &Value) -> Result<Vec<Indicator>, String> {
         resource: "account".into(),
         metric: "credits".into(),
         unit: Some("credit".into()),
-        limit: None,
-        usage: usage_of(value),
+        limit,
+        usage,
         remaining: Some(remaining.to_string()),
         window: None,
         resets_at_unix,
@@ -574,6 +591,42 @@ mod tests {
         let indicators = parse_credits(&dead).unwrap();
         assert_eq!(indicators[0].remaining.as_deref(), Some("0"));
         assert_eq!(indicators[0].resets_at_unix, None);
+    }
+
+    #[test]
+    fn an_exhausted_subscription_still_names_its_reset_and_its_size() {
+        // A live account with its cycle spent: a monthly plan and the plan's
+        // bonus quota, both at zero, ending together a month after they began.
+        let pack = |capacity_type: i64, size: i64, left: i64| {
+            json!({
+                "CapacityType": capacity_type, "CapacityUnit": "credit",
+                "CapacitySize": size, "CapacityUsed": size - left, "CapacityRemain": left,
+                "CycleCapacitySize": size, "CycleCapacityUsed": size - left,
+                "CycleCapacityRemain": left,
+                "CycleStartTime": "2026-11-18 12:08:35", "CycleEndTime": "2026-12-18 12:08:34",
+                "DeductionStartTime": 1794974915000u64, "DeductionEndTime": 1797566914000u64,
+            })
+        };
+        let meter = |accounts: Vec<Value>| json!({"code": 0, "data": {"Response": {"Data": {"TotalDosage": 100, "Accounts": accounts}}}});
+        let spent = parse_credits(&meter(vec![pack(2, 1000, 0), pack(2, 1000, 0)])).unwrap();
+        assert_eq!(spent[0].remaining.as_deref(), Some("0"));
+        assert_eq!(spent[0].usage.as_deref(), Some("2000"));
+        assert_eq!(spent[0].limit.as_deref(), Some("2000"));
+        assert_eq!(spent[0].resets_at_unix, Some(1797566914));
+        // A bonus pack with something left adds to what is left, not to the cycle.
+        let with_bonus = parse_credits(&meter(vec![
+            pack(2, 1000, 0),
+            pack(2, 1000, 0),
+            pack(1, 110, 110),
+        ]))
+        .unwrap();
+        assert_eq!(with_bonus[0].remaining.as_deref(), Some("110"));
+        assert_eq!(with_bonus[0].limit.as_deref(), Some("2000"));
+        // A spent bonus pack alone is no cycle: nothing to wait for.
+        let bonus_only = parse_credits(&meter(vec![pack(1, 110, 0)])).unwrap();
+        assert_eq!(bonus_only[0].remaining.as_deref(), Some("0"));
+        assert_eq!(bonus_only[0].limit, None);
+        assert_eq!(bonus_only[0].resets_at_unix, None);
     }
 
     #[tokio::test]
