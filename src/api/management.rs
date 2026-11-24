@@ -259,14 +259,16 @@ pub async fn put_pool(
             "a pool needs at least one member",
         );
     }
-    let members = match parse_members(&state, &body.members) {
+    let existing = {
+        let metamodels = state.metamodels.lock().unwrap();
+        match metamodels.get(&MetamodelId::new(name.clone())) {
+            Ok(existing) => existing,
+            Err(e) => return internal(&e.0),
+        }
+    };
+    let members = match parse_members(&state, &body.members, existing.as_ref()) {
         Ok(members) => members,
         Err(reject) => return *reject,
-    };
-    let mut metamodels = state.metamodels.lock().unwrap();
-    let existing = match metamodels.get(&MetamodelId::new(name.clone())) {
-        Ok(existing) => existing,
-        Err(e) => return internal(&e.0),
     };
     if existing.is_some()
         && headers
@@ -278,6 +280,7 @@ pub async fn put_pool(
             "a pool with this name already exists",
         );
     }
+    let mut metamodels = state.metamodels.lock().unwrap();
     match existing {
         None => {
             let metamodel = match Metamodel::new(MetamodelId::new(name), members) {
@@ -312,10 +315,13 @@ fn valid_pool_name(name: &str) -> bool {
 /// Members reference configured connections; a typo in `provider_id`
 /// or `upstream_id` would otherwise silently never resolve. Err = the
 /// rejection response. When a dynamic provider's catalog has not arrived
-/// yet the member passes: the model may appear on the next refresh.
+/// yet the member passes: the model may appear on the next refresh. A
+/// member the pool already has passes too: a provider may drop a model,
+/// and the pool keeps it, unused, and stays editable.
 fn parse_members(
     state: &Arc<ApiState>,
     body: &[MemberBody],
+    existing: Option<&Metamodel>,
 ) -> Result<Vec<ModelId>, Box<Response>> {
     body.iter()
         .map(|m| {
@@ -326,25 +332,31 @@ fn parse_members(
                     m.provider_id
                 ))));
             };
-            let known = if !provider_conn.static_models().is_empty() {
-                provider_conn
-                    .static_models()
-                    .iter()
-                    .any(|s| s.upstream_id == m.upstream_id)
-            } else {
-                match state.models.lock() {
-                    Ok(models) => match models.list(&m.provider_id) {
-                        // An empty snapshot means "no catalog yet": skip.
-                        Ok(snapshot) => {
-                            snapshot.is_empty()
-                                || snapshot.iter().any(|s| s.upstream_id == m.upstream_id)
-                        }
-                        // A catalog read failure must not reject the pool.
+            let kept = existing.is_some_and(|pool| {
+                pool.members().iter().any(|member| {
+                    member.provider() == &provider && member.upstream() == m.upstream_id
+                })
+            });
+            let known = kept
+                || if !provider_conn.static_models().is_empty() {
+                    provider_conn
+                        .static_models()
+                        .iter()
+                        .any(|s| s.upstream_id == m.upstream_id)
+                } else {
+                    match state.models.lock() {
+                        Ok(models) => match models.list(&m.provider_id) {
+                            // An empty snapshot means "no catalog yet": skip.
+                            Ok(snapshot) => {
+                                snapshot.is_empty()
+                                    || snapshot.iter().any(|s| s.upstream_id == m.upstream_id)
+                            }
+                            // A catalog read failure must not reject the pool.
+                            Err(_) => true,
+                        },
                         Err(_) => true,
-                    },
-                    Err(_) => true,
-                }
-            };
+                    }
+                };
             if !known {
                 return Err(Box::new(api_error(
                     StatusCode::BAD_REQUEST,
@@ -1939,6 +1951,79 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(ok.status(), reqwest::StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn a_member_the_pool_already_has_stays_when_the_catalog_drops_it() {
+        let st = state();
+        let snapshot = |ids: &[&str]| {
+            ids.iter()
+                .map(|id| crate::storage::catalog::NewModel {
+                    upstream_id: (*id).into(),
+                    context_tokens: None,
+                    observed_at_unix: 1,
+                })
+                .collect()
+        };
+        st.models
+            .lock()
+            .unwrap()
+            .replace_snapshot("prov", snapshot(&["m1", "m2"]))
+            .unwrap();
+        let base = serve(&st).await;
+        let client = auth();
+        let put = |pool: &str, members: &[&str]| {
+            client
+                .put(format!("{base}/v1/management/pools/{pool}"))
+                .json(&json!({
+                    "members": members
+                        .iter()
+                        .map(|id| json!({"provider_id": "prov", "upstream_id": id}))
+                        .collect::<Vec<_>>(),
+                }))
+        };
+        assert_eq!(
+            put("main", &["m1", "m2"]).send().await.unwrap().status(),
+            reqwest::StatusCode::CREATED
+        );
+
+        // The provider drops m1. The pool keeps it, and can still be edited.
+        st.models
+            .lock()
+            .unwrap()
+            .replace_snapshot("prov", snapshot(&["m2"]))
+            .unwrap();
+        let response = put("main", &["m2", "m1"]).send().await.unwrap();
+        assert_eq!(
+            response.status(),
+            reqwest::StatusCode::OK,
+            "{}",
+            response.text().await.unwrap()
+        );
+        let pool: serde_json::Value = client
+            .get(format!("{base}/v1/management/pools/main"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let ids: Vec<&str> = pool["members"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["upstream_id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, ["m2", "m1"]);
+
+        // A model new to the pool still has to be in the catalog.
+        let response = put("main", &["m2", "m1", "typo-model"])
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST);
+        let response = put("other", &["m1"]).send().await.unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
