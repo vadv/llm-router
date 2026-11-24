@@ -709,6 +709,8 @@ if (
 
 export const mockApi: Api = {
   health: () => wait(health),
+
+  running: () => wait([]),
   pools: () => wait(pools.map((pool) => ({ ...pool, members: [...pool.members] }))),
   putPool: (name: string, members: Member[], createOnly = false) => {
     const existing = pools.find((pool) => pool.name === name);

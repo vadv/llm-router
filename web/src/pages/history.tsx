@@ -7,12 +7,12 @@ import {
   IconSearch,
 } from "@tabler/icons-react";
 import { useRef, useState, type FormEvent } from "react";
-import { api, type RequestQuery, type RequestRecord } from "../api";
+import { api, type RequestQuery, type RequestRecord, type RunningRequest } from "../api";
 import { localInput } from "../components/usage-pivot";
 import { RequestDrawer } from "../components/request-drawer";
 import { OutcomeBadge, PageHeader, Panel } from "../components/ui";
 import { clock, compact, dateTime, money, span, tpsFormat } from "../format";
-import { routeParam, usePoll } from "../hooks";
+import { routeParam, useNow, usePoll } from "../hooks";
 import { Drill, drillUrl, SourceNote } from "./overview-links";
 import { ActivityPanel, intervalLabel } from "./request-activity";
 import type { CallInterval } from "../components/request-timeline";
@@ -69,6 +69,9 @@ export function HistoryPage() {
   const [cursors, setCursors] = useState<{ id: string; since?: number }[]>([]);
   const [selected, setSelected] = useState<RequestRecord | null>(null);
   const cursor = cursors.at(-1);
+  // Calls being served live in the core's memory only; they reach the log
+  // once they end.
+  const running = usePoll(api.running);
   // Usage links select attempts; the history picker selects request starts.
   const attempts = routeWindow(routeParam("from"), routeParam("to"));
   const fixed = routeWindow(routeParam("since"), routeParam("until"));
@@ -338,6 +341,19 @@ export function HistoryPage() {
           onPick={pickInterval}
         />
       )}
+      {!!running.data?.length && (
+        <Panel
+          p={0}
+          title={<h2>In flight</h2>}
+          description="What the router is serving now. A call joins the log below once it ends."
+        >
+          <div className="diag-ledger diag-inflight" role="list" aria-label="Calls in flight">
+            {running.data.map((call) => (
+              <RunningCall key={call.id} call={call} />
+            ))}
+          </div>
+        </Panel>
+      )}
       <div
         className="calls-log-target"
         tabIndex={-1}
@@ -547,6 +563,50 @@ function HistoryResults({
         </Button>
       )}
     </Panel>
+  );
+}
+
+// A call the core is serving, in the columns of the log. There is nothing
+// to open yet: tokens, cost and the outcome are known when the call ends.
+function RunningCall({ call }: { call: RunningRequest }) {
+  const now = useNow();
+  const attempt = call.attempts.at(-1);
+  return (
+    <article className="diag-call" role="listitem">
+      <div className="diag-call-time" title={dateTime(call.started_at_unix)}>
+        <strong>{clock(call.started_at_unix)}</strong>
+        <small>
+          {new Date(call.started_at_unix * 1000).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          })}
+        </small>
+      </div>
+      <div className="diag-route">
+        <strong title={call.metamodel}>{call.metamodel}</strong>
+        <small>
+          {attempt
+            ? `${attempt.provider_id} / ${attempt.upstream_id}`
+            : "Waiting for the first attempt"}
+        </small>
+      </div>
+      <div className="diag-result">
+        <Badge color="teal" variant="light" size="sm">
+          running
+        </Badge>
+        <small>
+          {call.attempts.length} {call.attempts.length === 1 ? "attempt" : "attempts"}
+        </small>
+      </div>
+      <div className="diag-key">
+        <small>Client key</small>
+        <span title={call.key_alias}>{call.key_alias}</span>
+      </div>
+      <div className="diag-measure">
+        <strong>{span(call.started_at_unix, now / 1000) ?? "—"}</strong>
+        <small>elapsed</small>
+      </div>
+    </article>
   );
 }
 
