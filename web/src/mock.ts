@@ -2,44 +2,35 @@
 // Enable with ?mock=1 in the URL or VITE_MOCK=1 at build time.
 // Values are plausible, not recorded: never treat them as real usage.
 
+import {
+  cancelMockResearch,
+  catalogRows,
+  maxAgeDays,
+  mockCard,
+  mockCollectedAt,
+  mockKey,
+  mockJobInProgress,
+  mockResearch,
+  modelsByProvider,
+  researchMockCard,
+  startMockResearch,
+} from "./mock-catalog";
 import type {
   Api,
   Ban,
   EventRecord,
   Health,
-  KnowledgeCard,
   Member,
   MetaModel,
   Observation,
   Pool,
   ProviderInfo,
-  ProviderModel,
   RequestRecord,
   RequestQuery,
   RequestBucket,
   UsageBucket,
   UsageStats,
 } from "./api";
-
-// The mock stands in for the core, so it declares the keys its fake catalog
-// would return. Real client code never computes a knowledge key: it reads
-// `knowledge_key` from the catalog and `key` from a card answer.
-const MOCK_KEYS: Record<string, string> = {
-  "deepseek-chat": "deepseek-chat",
-  "deepseek-reasoner": "deepseek-reasoner",
-  "glm-4.6": "glm-4-6",
-  "glm-4.5-air": "glm-4-5-air",
-  "glm-4.5v": "glm-4-5v",
-  "qwen3-coder-30b": "qwen3-coder-30b",
-  "gpt-5.1": "gpt-5-1",
-  "qwen/qwen3-coder:free": "qwen3-coder",
-  "z-ai/glm-4.5-air:free": "glm-4-5-air",
-  "moonshotai/kimi-k2:free": "kimi-k2",
-};
-
-function mockKey(upstreamId: string): string {
-  return MOCK_KEYS[upstreamId] ?? upstreamId;
-}
 
 const now = () => Math.floor(Date.now() / 1000);
 const started = now() - 3 * 86400 - 4 * 3600;
@@ -103,165 +94,38 @@ const providers: ProviderInfo[] = [
     last_refresh: { last_success_unix: now() - 120, last_error: null },
     local_state: null,
   },
+  {
+    provider_id: "alibaba",
+    catalog: "dynamic",
+    last_refresh: { last_success_unix: now() - 260, last_error: null },
+    local_state: null,
+  },
+  {
+    provider_id: "opencode",
+    catalog: "dynamic",
+    last_refresh: { last_success_unix: now() - 70, last_error: null },
+    local_state: null,
+  },
+  {
+    provider_id: "tokenator",
+    catalog: "dynamic",
+    last_refresh: { last_success_unix: now() - 150, last_error: null },
+    local_state: null,
+  },
+  {
+    provider_id: "kimi",
+    catalog: "dynamic",
+    last_refresh: { last_success_unix: now() - 200, last_error: null },
+    local_state: null,
+  },
 ];
 
-const modelsByProvider: Record<string, ProviderModel[]> = {
-  deepseek: [
-    { upstream_id: "deepseek-chat", context_tokens: 128_000, observed_at_unix: now() - 42 },
-    { upstream_id: "deepseek-reasoner", context_tokens: 64_000, observed_at_unix: now() - 42 },
-  ],
-  zai: [
-    { upstream_id: "glm-4.6", context_tokens: 200_000, observed_at_unix: now() - 96 },
-    { upstream_id: "glm-4.5-air", context_tokens: 128_000, observed_at_unix: now() - 96 },
-    { upstream_id: "glm-4.5v", context_tokens: 64_000, observed_at_unix: now() - 96 },
-  ],
-  llamacpp: [{ upstream_id: "qwen3-coder-30b", context_tokens: 32_768, observed_at_unix: started }],
-  openai: [{ upstream_id: "gpt-5.1", context_tokens: 400_000, observed_at_unix: started }],
-  openrouter: [
-    { upstream_id: "qwen/qwen3-coder:free", context_tokens: 262_144, observed_at_unix: now() - 120 },
-    { upstream_id: "z-ai/glm-4.5-air:free", context_tokens: 131_072, observed_at_unix: now() - 120 },
-    { upstream_id: "moonshotai/kimi-k2:free", context_tokens: 131_072, observed_at_unix: now() - 120 },
-  ],
-};
+// The catalog and its researched cards live in their own module, shaped as
+// the core reports them. Local engines list their model since startup.
+const observedAt = (provider: string) =>
+  provider === "llamacpp" || provider === "openai" ? started : now() - 96;
+const catalogByProvider = modelsByProvider(observedAt);
 
-// Design-only researched cards. A few keys are researched, the rest are not,
-// so the Wiki can show both states without contacting any upstream.
-type CardSeed = {
-  vendor: string;
-  name: string;
-  primaryUse?: string;
-  description: string;
-  context: number;
-  release: string;
-  modality: string;
-  strengths: string[];
-  weaknesses: string[];
-  rating: number;
-};
-
-const CARD_SEEDS: Record<string, CardSeed> = {
-  "deepseek-chat": {
-    vendor: "DeepSeek",
-    name: "DeepSeek V3.2 Chat",
-    primaryUse: "Chat and instruction-following assistants",
-    description:
-      "General-purpose chat and instruction model from DeepSeek with low token cost and fast responses.",
-    context: 128_000,
-    release: "2025-09",
-    modality: "text",
-    strengths: ["Low cost per token", "Fast time to first token", "Strong instruction following"],
-    weaknesses: ["Weaker on very long tool-calling sessions", "No image input"],
-    rating: 62,
-  },
-  "glm-4-6": {
-    vendor: "Z.ai",
-    name: "GLM-4.6",
-    primaryUse: "Multi-step software tasks and tool use",
-    description:
-      "Reasoning and coding model from Z.ai with tool calling and long context.",
-    context: 200_000,
-    release: "2025-09",
-    modality: "text",
-    strengths: ["Strong coding and tool use", "Large context window", "Good cost/quality ratio"],
-    weaknesses: ["Slower than small chat models", "Occasional verbose reasoning"],
-    rating: 71,
-  },
-  "gpt-5-1": {
-    vendor: "OpenAI",
-    name: "GPT-5.1",
-    primaryUse: "Reasoning over text and images",
-    description:
-      "Text and image model with configurable reasoning effort.",
-    context: 400_000,
-    release: "2025-11",
-    modality: "Text and image input; text output",
-    strengths: ["Multimodal input", "Configurable reasoning effort", "Large context window"],
-    weaknesses: ["Highest cost in a mixed pool", "Latency under reasoning effort"],
-    rating: 88,
-  },
-  "qwen3-coder": {
-    vendor: "Alibaba Cloud",
-    name: "Qwen3 Coder",
-    primaryUse: "Frontend implementation and repository editing",
-    description:
-      "Qwen coding model for repository editing and tool calls. Available from several providers, including free OpenRouter variants.",
-    context: 262_144,
-    release: "2025-07",
-    modality: "text",
-    strengths: ["Repository editing", "Tool calling", "Free variant available"],
-    weaknesses: ["Free tier is rate limited", "Weaker general prose"],
-    rating: 68,
-  },
-};
-
-const mockCollectedAt = new Map<string, number>();
-const extraCards = new Map<string, KnowledgeCard>();
-
-function seedCard(seed: CardSeed, key: string): KnowledgeCard {
-  return {
-    canonical_name: seed.name,
-    vendor: seed.vendor,
-    release_date: seed.release,
-    description: seed.description,
-    use_cases: seed.primaryUse ? [seed.primaryUse] : [],
-    strengths: seed.strengths,
-    weaknesses: seed.weaknesses,
-    modality: seed.modality,
-    context_window: seed.context,
-    pricing_hint: "Pay per token; free variants are quota-limited by the provider.",
-    ratings: [
-      ...(key === "qwen3-coder" || key === "gpt-5-1" ? [{source:"Demo lab (fixture)",metric:"WebDev Elo",value:key === "qwen3-coder" ? 1240 : 1190,as_of:"2026-06",note:"Synthetic example, not a measurement"}] : []),
-      {
-        source: "Artificial Analysis (design data)",
-        metric: "Intelligence Index",
-        value: seed.rating,
-        as_of: "2026-06",
-        note: "Plausible mock value, not a measurement",
-      },
-    ],
-    family_line: `${seed.vendor} general model family · key ${key}`,
-    sources: [
-      "https://example.com/model-card",
-      "https://example.com/pricing",
-    ],
-  };
-}
-
-function mockCard(key: string): KnowledgeCard | null {
-  const seed = CARD_SEEDS[key];
-  if (seed) return seedCard(seed, key);
-  return extraCards.get(key) ?? null;
-}
-
-function collectedCard(upstreamId: string): KnowledgeCard {
-  const key = mockKey(upstreamId);
-  const seed: CardSeed = {
-    vendor: "Independent",
-    name: key,
-    description: `Researched card for ${upstreamId}, collected in mock mode. The real core writes this from a web-search research run.`,
-    context: 128_000,
-    release: "2026-01",
-    modality: "text",
-    strengths: ["Documented sources", "Shared across aliases", "Fresh research"],
-    weaknesses: ["Mock content, not a measurement"],
-    rating: 55,
-  };
-  const card = seedCard(seed, key);
-  extraCards.set(key, card);
-  return card;
-}
-
-function catalogRows() {
-  return Object.entries(modelsByProvider).flatMap(([provider_id, models]) =>
-    models.map((model) => ({
-      provider_id,
-      upstream_id: model.upstream_id,
-      context_tokens: model.context_tokens,
-      knowledge_key: mockKey(model.upstream_id),
-      observed_at_unix: model.observed_at_unix,
-    })),
-  );
-}
 
 const observations: Observation[] = [
   {
@@ -350,7 +214,7 @@ const observations: Observation[] = [
   },
   // One account counter that the driver copies onto every free model of the
   // catalog. The three rows are one value, not three: never sum them.
-  ...["qwen/qwen3-coder:free", "z-ai/glm-4.5-air:free", "moonshotai/kimi-k2:free"].map(
+  ...["qwen/qwen3-coder:free", "z-ai/glm-4.5-air:free", "moonshotai/kimi-k2.5:free"].map(
     (model): Observation => ({
       provider_id: "openrouter",
       resource: model,
@@ -835,6 +699,14 @@ function matchingCalls(query: Partial<RequestQuery>) {
     (query.attemptWindow || query.toUnix === undefined || r.started_at_unix < query.toUnix));
 }
 
+// A screenshot of "research running" opens the Wiki with ?job=running.
+// The self-checks load this module in Node, where there is no window.
+if (
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("job") === "running"
+)
+  mockJobInProgress();
+
 export const mockApi: Api = {
   health: () => wait(health),
   pools: () => wait(pools.map((pool) => ({ ...pool, members: [...pool.members] }))),
@@ -850,7 +722,7 @@ export const mockApi: Api = {
     return wait(undefined);
   },
   providers: () => wait(providers),
-  providerModels: (providerId) => wait(modelsByProvider[providerId] ?? []),
+  providerModels: (providerId) => wait(catalogByProvider[providerId] ?? []),
   observations: (providerId) =>
     wait(providerId ? observations.filter((row) => row.provider_id === providerId) : observations),
 
@@ -992,24 +864,41 @@ export const mockApi: Api = {
   events: (limit = 100) => wait(events.slice(0, limit)),
   models: () => wait(metamodels),
 
-  catalog: () => wait(catalogRows()),
-  modelSummaries: (keys) => wait(keys.flatMap(key => {
-    const card = mockCard(key);
-    return card ? [{key, canonical_name:card.canonical_name, description:card.description, primary_use:card.use_cases[0] ?? null, modality:card.modality,
-      vendor:card.vendor, release_date:card.release_date, ratings:card.ratings}] : [];
-  })),
+  catalog: () => wait(catalogRows(observedAt)),
+
+  // The same fields the core sends for browsing; the long prose lists
+  // stay with the full card.
+  modelSummaries: (keys) =>
+    wait(
+      keys.flatMap((key) => {
+        const card = mockCard(key);
+        if (!card) return [];
+        const {
+          canonical_name, vendor, release_date, ratings, context_window, max_output_tokens,
+          input_modalities, output_modalities, license, open_weights, tags, speed, pricing,
+          pricing_hint, description, modality,
+        } = card;
+        return [{
+          key, canonical_name, vendor, release_date, ratings, context_window, max_output_tokens,
+          input_modalities, output_modalities, license, open_weights, tags, speed, pricing,
+          pricing_hint, description, modality, primary_use: card.use_cases[0] ?? null,
+        }];
+      }),
+    ),
 
   modelKnowledge: (upstreamId) => {
     const key = mockKey(upstreamId);
     const card = mockCard(key);
-    const collected = card ? (mockCollectedAt.get(key) ?? now() - 4 * 86_400) : null;
+    const collected = mockCollectedAt(key, now());
+    const max_age_secs = maxAgeDays() * 86_400;
     return wait({
       key,
       card,
       collected_at_unix: collected,
-      fresh: collected !== null && now() - collected < 30 * 86_400,
-      max_age_secs: 30 * 86_400,
-      catalog_entries: catalogRows()
+      generator: collected === null ? null : "deepseek/deepseek-flash+websearch",
+      fresh: collected !== null && now() - collected < max_age_secs,
+      max_age_secs,
+      catalog_entries: catalogRows(observedAt)
         .filter((row) => row.knowledge_key === key)
         .map(({ provider_id, upstream_id }) => ({ provider_id, upstream_id })),
     });
@@ -1018,20 +907,25 @@ export const mockApi: Api = {
   collectKnowledge: async ({ upstreamId, force }) => {
     await new Promise((resolve) => setTimeout(resolve, 900));
     const key = mockKey(upstreamId);
-    if (!force && mockCard(key)) {
+    const at = now();
+    const collected = mockCollectedAt(key, at);
+    if (!force && collected !== null && at - collected < maxAgeDays() * 86_400) {
       return { key, collected: false, reason: "fresh" };
     }
-    const card = collectedCard(upstreamId);
-    mockCollectedAt.set(key, now());
+    const card = mockCard(key) ?? researchMockCard(key, upstreamId, at);
     return {
       key,
       collected: true,
-      collected_at_unix: now(),
+      collected_at_unix: at,
       card,
       repairs: [],
-      catalog_entries: catalogRows()
+      catalog_entries: catalogRows(observedAt)
         .filter((row) => row.knowledge_key === key)
         .map(({ provider_id, upstream_id }) => ({ provider_id, upstream_id })),
     };
   },
+
+  researchStatus: () => wait(mockResearch(now())),
+  startResearch: (force) => wait(startMockResearch(force, now())),
+  cancelResearch: () => wait(cancelMockResearch()),
 };

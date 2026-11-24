@@ -1,228 +1,289 @@
-.ws-header,
-.ws-footer,
-.ws-modal {
-  --ws-line: var(--mantine-color-default-border);
-  --ws-muted: var(--mantine-color-dimmed);
-  --ws-accent: var(--mantine-color-teal-light-color);
-  font-variant-numeric: tabular-nums;
-}
-.ws-toolbar,
-.ws-footer,
-.ws-brand,
-.ws-trail,
-.ws-jump,
-.ws-health,
-.ws-footer button,
-.ws-modal-title,
-.ws-settings,
-.ws-help {
-  display: flex;
-  align-items: center;
+/* Shell: one 50px header and the modal tools it opens. The page owns the
+   rest of the screen; nothing here draws a second bar. */
+.ws-header {
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
 }
 .ws-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   height: 100%;
-  gap: 16px;
-  padding: 0 20px;
+  padding: 0 12px 0 14px;
+  font-variant-numeric: tabular-nums;
 }
 .ws-brand {
-  gap: 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 4px;
+  color: var(--ink);
   text-decoration: none;
-  color: var(--mantine-color-text);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
   white-space: nowrap;
-}
-.ws-brand strong {
-  font-size: 16px;
-  letter-spacing: -0.055em;
-  font-weight: 680;
 }
 .ws-mark {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--ws-line);
-  border-radius: 9px;
-  background: var(--mantine-color-teal-light);
-  color: var(--ws-accent);
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--mantine-color-teal-6);
+  color: #fff;
 }
-.ws-trail {
-  gap: 8px;
-  padding-left: 16px;
-  border-left: 1px solid var(--ws-line);
-  min-width: 0;
-  color: var(--ws-muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-.ws-trail b {
-  color: var(--mantine-color-text);
-  font-weight: 550;
-}
+
+/* The command menu trigger reads as a search field, because it is one. */
 .ws-jump,
 .ws-health,
-.ws-footer button:not(.mantine-ActionIcon-root) {
-  border: 0;
+.ws-instance {
+  border: 1px solid var(--line);
   font: inherit;
   cursor: pointer;
-  color: inherit;
-  background: transparent;
+  color: var(--ink-soft);
+  background: var(--surface);
+  transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
 }
 .ws-jump {
-  margin-left: auto;
-  gap: 9px;
-  width: clamp(180px, 23vw, 340px);
-  height: 32px;
-  padding: 0 9px;
-  border: 1px solid var(--ws-line);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: clamp(190px, 30vw, 400px);
+  height: 30px;
+  padding: 0 7px 0 10px;
   border-radius: 8px;
-  color: var(--ws-muted);
-  background: var(--mantine-color-default-hover);
-  font-size: 12px;
+  font-size: 13px;
   text-align: left;
+}
+.ws-jump > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-jump > svg {
+  color: var(--ink-faint);
+  flex: none;
 }
 .ws-jump kbd {
   margin-left: auto;
-  white-space: nowrap;
-  border: 1px solid var(--ws-line);
-  padding: 0 4px;
-  border-radius: 4px;
-  font: 11px/18px var(--mantine-font-family-monospace);
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 5px;
+  background: var(--page);
+  color: var(--ink-soft);
+  font: 500 11px/17px var(--mantine-font-family-monospace);
 }
+.ws-jump:hover,
+.ws-health:hover,
+.ws-instance:hover {
+  border-color: color-mix(in srgb, var(--ink-faint) 55%, var(--line));
+  color: var(--ink);
+}
+.ws-jump:focus-visible,
+.ws-health:focus-visible,
+.ws-instance:focus-visible {
+  outline: 2px solid var(--mantine-color-teal-5);
+  outline-offset: 1px;
+}
+
 .ws-health {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
   gap: 7px;
-  padding: 6px 0 6px 13px;
-  border-left: 1px solid var(--ws-line);
+  height: 28px;
+  padding: 0 11px 0 10px;
+  border-radius: 999px;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 550;
+  white-space: nowrap;
 }
 .ws-health i {
-  width: 8px;
-  height: 8px;
-  background: var(--ws-muted);
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
+  background: var(--ink-faint);
 }
 .ws-health[data-state="ok"] i {
-  background: var(--mantine-color-teal-6);
+  background: #2fbf8f;
 }
 .ws-health[data-state="warn"] i {
-  background: var(--mantine-color-orange-6);
+  background: #e8b04b;
+}
+.ws-health[data-state="bad"] i {
+  background: #ec5b55;
 }
 .ws-health[data-state="unknown"] i {
   background: transparent;
-  border: 2px solid var(--ws-muted);
+  box-shadow: inset 0 0 0 1.5px var(--ink-faint);
 }
-.ws-footer {
-  gap: 14px;
-  padding: 0 16px;
-  font-size: 11px;
-  color: var(--ws-muted);
-}
-.ws-footer button:not(.mantine-ActionIcon-root) {
+.ws-instance {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  padding: 0 3px;
-  height: 30px;
-  font-size: 11px;
-  white-space: nowrap;
+  height: 28px;
+  max-width: 230px;
+  padding: 0 5px 0 9px;
+  border-color: transparent;
+  background: transparent;
+  border-radius: var(--radius-control);
+  font: 500 12px var(--mantine-font-family-monospace);
 }
-.ws-footer .ws-instance {
-  min-width: 0;
+.ws-instance:hover {
+  border-color: transparent;
+  background: var(--surface-hover);
 }
-.ws-instance strong {
+.ws-instance > span {
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--mantine-color-text);
-  font: 550 12px/1.4 var(--mantine-font-family-monospace);
+  white-space: nowrap;
 }
-.ws-footer svg {
-  flex-shrink: 0;
-}
-.ws-footer-space {
-  flex: 1;
-}
-.ws-checked time {
-  margin-left: 4px;
-  font-family: var(--mantine-font-family-monospace);
-}
-.ws-session,
-.ws-poll {
+.ws-instance svg {
   flex: none;
 }
-.ws-toolbar button:hover,
-.ws-footer button:hover {
-  color: var(--mantine-color-text);
+.ws-instance-chevron {
+  color: var(--ink-faint);
 }
-.ws-header :is(button, a):focus-visible,
-.ws-footer button:focus-visible {
-  outline: 2px solid var(--ws-accent);
-  outline-offset: 1px;
+.ws-dim {
+  color: var(--ink-faint);
+}
+
+/* Modals */
+.ws-modal {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--mantine-shadow-xl);
+}
+.ws-modal .mantine-Modal-header {
+  padding: 16px 16px 8px;
+}
+.ws-modal .mantine-Modal-body {
+  padding: 12px 16px 16px;
 }
 .ws-modal-title {
-  gap: 9px;
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -0.025em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
-.ws-modal-title svg,
-.ws-command-icon {
-  color: var(--ws-accent);
+.ws-modal-title svg {
+  color: var(--accent);
 }
+/* The command menu has no title: the search field sits on top. */
+.ws-modal-command .mantine-Modal-body {
+  padding: 10px;
+}
+
 .ws-results {
-  max-height: min(47dvh, 390px);
+  max-height: min(54dvh, 430px);
   overflow-y: auto;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 .ws-results [role="option"] {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 6px 8px;
   border-radius: 7px;
-  padding: 7px 9px;
   cursor: pointer;
 }
 .ws-results [aria-selected="true"] {
-  background: var(--mantine-color-teal-light);
+  background: var(--accent-soft);
 }
-.ws-results strong,
-.ws-results small,
-.ws-readout small,
-.ws-readout strong {
-  display: block;
+.ws-command-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  flex: none;
+  color: var(--ink-faint);
 }
-.ws-results strong {
+.ws-results [aria-selected="true"] .ws-command-icon {
+  color: var(--accent);
+}
+.ws-command-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+.ws-command-text strong,
+.ws-command-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-command-text strong {
   font-size: 13px;
-  font-weight: 580;
+  font-weight: 550;
 }
-.ws-results small,
-.ws-readout small,
-.ws-section-title,
-.ws-help,
-.ws-note {
-  font-size: 12px;
-  color: var(--ws-muted);
+.ws-command-text small {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+.ws-results [data-kind="model"] .ws-command-text strong {
+  font-family: var(--mantine-font-family-monospace);
+  font-weight: 500;
+  font-size: 12.5px;
 }
 .ws-enter {
   margin-left: auto;
-  color: var(--ws-muted);
+  color: var(--ink-soft);
+  font-size: 12px;
   visibility: hidden;
 }
-[aria-selected="true"] .ws-enter {
+.ws-results [aria-selected="true"] .ws-enter {
   visibility: visible;
 }
 .ws-help {
+  display: flex;
   justify-content: space-between;
   gap: 8px;
-  font-size: 11px;
-  border-top: 1px solid var(--ws-line);
   margin-top: 8px;
-  padding-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+.ws-help kbd {
+  margin-right: 2px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+  font: 500 10.5px/16px var(--mantine-font-family-monospace);
+}
+
+.ws-section-title {
+  margin: 14px 0 6px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+.ws-note {
+  margin: 8px 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .ws-readout {
   display: grid;
-  grid-template-columns: 1fr 1.2fr 0.7fr;
+  grid-template-columns: 1.1fr 1.2fr 0.7fr;
   gap: 8px;
-  border: 1px solid var(--ws-line);
-  border-radius: 9px;
   padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+.ws-readout small,
+.ws-readout strong,
+.ws-readout b {
+  display: block;
+}
+.ws-readout small {
+  color: var(--ink-soft);
+  font-size: 11.5px;
 }
 .ws-readout strong,
 .ws-readout b {
@@ -231,18 +292,11 @@
 }
 .ws-readout[data-state="ok"] strong,
 .ws-components [data-state="ok"] {
-  color: var(--ws-accent);
+  color: var(--accent);
 }
 .ws-readout[data-state="warn"] strong,
 .ws-components [data-state="warn"] {
-  color: var(--mantine-color-orange-light-color);
-}
-.ws-section-title {
-  margin: 16px 0 6px;
-  font-size: 10px;
-  text-transform: uppercase;
-  font-weight: 700;
-  letter-spacing: 0.095em;
+  color: #e8b04b;
 }
 .ws-components {
   display: grid;
@@ -255,122 +309,86 @@
   justify-content: space-between;
   gap: 6px;
   padding: 6px 0;
-  border-bottom: 1px solid var(--ws-line);
+  border-bottom: 1px solid var(--line);
   font-size: 12px;
 }
 .ws-components a {
   color: inherit;
-  text-decoration: underline;
-  text-decoration-color: var(--ws-line);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--ink-faint);
   text-underline-offset: 3px;
 }
 .ws-components a:hover {
-  color: var(--ws-accent);
+  color: var(--accent);
 }
 .ws-components small {
-  font-size: 10px;
-  font-weight: 650;
+  font-size: 10.5px;
+  font-weight: 600;
 }
 .ws-settings {
-  align-items: end;
-  gap: 8px;
+  display: flex;
+  align-items: flex-end;
   justify-content: space-between;
+  gap: 8px;
   margin-top: 14px;
 }
-.ws-note,
 .ws-confirm p {
-  line-height: 1.5;
   margin: 8px 0;
-}
-.ws-confirm p {
   font-size: 13px;
+  line-height: 1.5;
 }
 .ws-confirm button + button {
   margin-left: 8px;
 }
 .ws-endpoint {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   gap: 8px;
 }
 .ws-endpoint > .mantine-TextInput-root {
   flex: 1;
   min-width: 0;
 }
+
 @media (max-width: 60em) {
-  .ws-toolbar {
-    gap: 10px;
-    padding: 0 12px;
-  }
-  .ws-trail > span,
-  .ws-trail > svg {
+  .ws-instance > span {
     display: none;
   }
-  .ws-trail {
-    padding-left: 10px;
-  }
-  .ws-footer {
-    gap: 8px;
+  .ws-instance {
+    padding: 0 7px;
   }
 }
 @media (max-width: 43em) {
-  .ws-brand strong,
-  .ws-jump span,
-  .ws-jump kbd,
-  .ws-checked,
-  .ws-session span {
+  .ws-jump > span,
+  .ws-jump kbd {
     display: none;
   }
-  .ws-toolbar {
-    gap: 8px;
-  }
-  .ws-trail {
-    padding-left: 0;
-    border: 0;
-  }
-  .ws-trail b {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
   .ws-jump {
-    width: 34px;
+    width: 32px;
     justify-content: center;
     flex: none;
     padding: 0;
   }
+  .ws-health > span {
+    display: none;
+  }
   .ws-health {
-    padding: 6px 0 6px 8px;
+    padding: 0;
+    width: 30px;
+    justify-content: center;
+    border-radius: 8px;
   }
-  .ws-footer {
-    padding: 0 10px;
-    gap: 5px;
-  }
-  .ws-footer .ws-instance {
-    max-width: 48%;
-  }
-  .ws-footer .ws-instance strong {
-    font-size: 11px;
-  }
-  .ws-help {
-    font-size: 10px;
-  }
-}
-@media (max-width: 24em) {
   .ws-toolbar {
     gap: 6px;
     padding: 0 8px;
   }
-  .ws-health > svg {
-    display: none;
-  }
-  .ws-help {
-    flex-wrap: wrap;
+}
+@media (max-width: 24em) {
+  .ws-components {
+    grid-template-columns: 1fr;
   }
   .ws-settings,
   .ws-confirm {
     flex-wrap: wrap;
-  }
-  .ws-components {
-    grid-template-columns: 1fr;
   }
 }

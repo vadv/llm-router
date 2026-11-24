@@ -99,7 +99,7 @@ export function poolSuggestions(
         Number(!banned.has(key)),
         Number(needsImage && !!detail?.imageInput),
         Number(!!detail?.result),
-        detail?.result?.value ?? 0,
+        detail?.result?.rating.value ?? 0,
         Number(!!detail?.task),
         goal === "context" ? context : Number(Boolean(tagged || taskPool)),
         Number(same),

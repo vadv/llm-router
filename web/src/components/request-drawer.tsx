@@ -213,10 +213,12 @@ function AttemptDetail({
         </Code>
       )}
 
-      {(attempt.tool_count !== null || toolNames) && (
+      {/* An attempt with no tool data reports a null count and an empty
+          list; that is not a line. */}
+      {(attempt.tool_count != null || (toolNames?.length ?? 0) > 0) && (
         <Text size="xs" c="dimmed" mt={6}>
-          tool calls: {attempt.tool_count ?? "?"}
-          {toolNames
+          tool calls: {attempt.tool_count ?? toolNames!.length}
+          {toolNames?.length
             ? ` (${toolNames.join(", ")}${attempt.tool_names_truncated ? "…" : ""})`
             : ""}
           {attempt.tool_list_truncated ? " (+ more)" : ""}
@@ -253,12 +255,7 @@ function AttemptDetail({
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <Box>
-      <Text
-        size="11px"
-        c="dimmed"
-        tt="uppercase"
-        style={{ letterSpacing: 0.4 }}
-      >
+      <Text size="11px" c="dimmed" fw={500}>
         {label}
       </Text>
       <Text size="xs" ff="monospace">

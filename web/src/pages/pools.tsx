@@ -77,7 +77,7 @@ export function PoolsPage() {
     <>
       <PageHeader
         title="Pools"
-        description="Give clients one model name. Choose a primary model and the connections that can take over."
+        description="One model name for clients, backed by an ordered list of models."
         actions={
           <Button
             size="xs"
@@ -98,9 +98,13 @@ export function PoolsPage() {
 
       <section className="pb-launch" aria-label="Start a pool">
         <div>
-          <span>Route builder</span>
-          <h2>What will this pool handle?</h2>
-          <p className="pb-chooser-help">Start with the input and the deliverable. A model that builds a web page is not necessarily able to read a screenshot.</p>
+          <h2>New pool for</h2>
+          <p
+            className="pb-chooser-help"
+            title="A model that builds a web page is not necessarily one that reads a screenshot."
+          >
+            Start from the task. The builder then checks each model for it.
+          </p>
         </div>
         <div className="pb-launch-goals">
           {poolGoals
@@ -112,8 +116,7 @@ export function PoolsPage() {
                 className="pb-launch-choice"
                 size="sm"
                 aria-label={g.label}
-                leftSection={<g.icon size={16} />}
-                rightSection={<IconArrowRight size={13} />}
+                leftSection={<g.icon size={15} />}
                 disabled={!providerIds.length}
                 onClick={() =>
                   setDraft({
@@ -125,6 +128,7 @@ export function PoolsPage() {
                 }
               >
                 <span><strong>{g.label}</strong><small>{g.example}</small></span>
+                <IconArrowRight className="pb-launch-go" size={13} />
               </Button>
             ))}
         </div>
@@ -189,7 +193,8 @@ export function PoolsPage() {
           {visible.map((pool) => (
             <Panel
               key={pool.name}
-              title={<Copyable value={pool.name} size="sm" />}
+              // A pool name is an identifier: it wraps before it would be cut.
+              title={<Copyable value={pool.name} size="sm" block />}
               description={
                 pool.members.length > 1
                   ? `${pool.members.length - 1} fallback${pool.members.length === 2 ? "" : "s"} available`

@@ -22,11 +22,16 @@ import {
 } from "../src/model-key.ts";
 
 import { overviewPeriod, poolCoverage, recentOutcomes, trafficHours } from "../src/components/overview-math.ts";
-import { money, tps } from "../src/format.ts";
+import { compact, eta, money, tps } from "../src/format.ts";
 import { callTimeline } from "../src/components/request-timeline.ts";
 import { eventStory } from "../src/components/event-story.ts";
 import { poolSuggestions } from '../src/pool-suggestions.ts';
-import { benchmarks, wikiGroups, wikiResults } from "../src/wiki-catalog.ts";
+import {
+  benchmarks, comparable, defaultBenchmark, findModel, leaderboard, vendorOptions,
+  wikiGroups, wikiModels, wikiResults,
+} from "../src/wiki-catalog.ts";
+import { benchmarkInfo, benchmarkOrder, lowerIsBetter } from "../src/benchmarks.ts";
+import { benchmarkOf, modelSpecs, parsePricing, scoresOf, splitDescription, tagsOf } from "../src/model-facts.ts";
 
 import { findCommands } from "../src/components/workspace-commands.ts";
 
@@ -61,22 +66,239 @@ test('Pool finder explains exact catalog aliases, shared routes and task tags wi
   assert.deepEqual(find('fit','','missing'),[]);
 });
 
-test("Wiki ranks the entire catalog on one source and metric, keeps zero, and lists all connections", () => {
-  const row = (k,p,id) => ({knowledge_key:k, provider_id:p, upstream_id:id, context_tokens:null});
-  const rating = (source,value,as_of=null) => ({source,metric:"Index",value,as_of});
-  const groups = wikiGroups([row("a","one","A"),row("a","two","vendor/A"),row("b","two","B"),row("c","one","C"),row("d","one","D")],
-    [{key:"a",ratings:[rating("Lab",90,"2024-01"), rating("Lab",0,"2025-01")]},
-     {key:"b",ratings:[rating("Elsewhere",999),rating("Lab",5)]},
-     {key:"d",ratings:[rating("Lab",20),rating("Lab",30)]}]);
-  const metric = benchmarks(groups)[0];
-  assert.equal(metric.count,2);
-  const pick=(sort,provider=null,q="")=>wikiResults(groups,q,provider,null,"all",sort,metric.value).map(g=>g.key);
-  assert.deepEqual(pick("high"),["b","a","c","d"]);
-  assert.deepEqual(pick("low"),["a","b","c","d"]);
-  assert.deepEqual(pick("high","one","vendor/A"),["a"]);
+test("Wiki groups every listing of one key and reads the card under the key the core reports", () => {
+  const row = (k,p,id,ctx=null) => ({knowledge_key:k, provider_id:p, upstream_id:id, context_tokens:ctx});
+  const groups = wikiGroups([row("a","one","A"),row("a","two","vendor/A",200000),row("b","two","B"),row("c","one","C")],
+    [{key:"a",canonical_name:"Alpha",vendor:"Alpha Labs",description:"Alpha is a small model. It is cheap.",ratings:[{source:"Lab",metric:"Index",value:0,as_of:null}],pricing_hint:"$1 per 1M input tokens and $2 per 1M output tokens.",use_cases:["Chat"]},
+     {key:"b",ratings:[{source:"Elsewhere",metric:"Index",value:999}]}]);
+  assert.deepEqual(groups.map(g=>g.key),["a","b","c"]);
   assert.deepEqual(groups[0].providers,["one","two"]);
-  assert.equal(groups[0].scores.get(metric.value).value,0);
-  assert.equal(benchmarks(wikiGroups([row("x","one","X")],[])).length,0);
+  assert.equal(groups[0].context,200000);
+  assert.equal(groups[0].scores.get("index").rating.value,0);
+  // The benchmark order puts familiar families first.
+  assert.equal(benchmarkOrder("gpqa diamond") < benchmarkOrder("vendor thing"),true);
+  assert.deepEqual(groups[0].pricing,{currency:"USD",input:1,cachedInput:null,output:2,free:false,note:groups[0].pricing.note});
+  // Too short to stand alone without its subject: the lead keeps it.
+  assert.equal(groups[0].tagline,"Alpha is a small model.");
+  assert.equal(groups[2].card,null);
+  assert.equal(groups[2].tagline,"");
+});
+
+test("Wiki lists one model per researched name and keeps a rolling alias as a variant", () => {
+  const row = (k,p,id) => ({knowledge_key:k, provider_id:p, upstream_id:id, context_tokens:null});
+  const cards = [
+    {key:"gpt-5-1",canonical_name:"GPT-5.1",vendor:"OpenAI",ratings:[
+      {source:"Artificial Analysis",metric:"Intelligence Index",value:88},{source:"Artificial Analysis",metric:"GPQA Diamond",value:92},
+      {source:"OpenAI",metric:"HLE (max)",value:71},{source:"Artificial Analysis",metric:"AIME (max)",value:90}]},
+    {key:"gpt-5-1-latest",canonical_name:"GPT-5.1",vendor:"OpenAI",ratings:[
+      {source:"Artificial Analysis",metric:"Intelligence Index",value:88},{source:"OpenRouter",metric:"SWE-bench Verified",value:70},
+      {source:"Artificial Analysis",metric:"HLE (High)",value:60},{source:"Artificial Analysis",metric:"AIME (max)",value:95}]},
+    {key:"gpt-5-1-pro",canonical_name:"GPT-5.1 Pro",vendor:"OpenAI",ratings:[]},
+    {key:"mystery",vendor:"Nobody",canonical_name:null,ratings:[]},
+    {key:"other-vendor",canonical_name:"GPT-5.1",vendor:"Someone Else",ratings:[]},
+  ];
+  const models = wikiModels(wikiGroups([
+    row("gpt-5-1","openai","gpt-5.1"),row("gpt-5-1","openrouter","openai/gpt-5.1"),
+    row("gpt-5-1-latest","openrouter","~openai/gpt-5.1-latest"),
+    row("gpt-5-1-pro","openai","gpt-5.1-pro"),
+    row("mystery","x","mystery"),
+    row("other-vendor","y","other"),
+  ], cards));
+  const byKey = Object.fromEntries(models.map(m=>[m.key,m]));
+  assert.equal(models.length,4);
+  const gpt = byKey["gpt-5-1"];
+  // The alias folds into the model: most listings name it, the rest become variants.
+  assert.deepEqual(gpt.providers,["openai","openrouter"]);
+  assert.deepEqual(gpt.variants.map(v=>v.key),["gpt-5-1-latest"]);
+  // A score the primary lacks is read from a variant.
+  assert.equal(gpt.scores.get("swe-bench verified").rating.value,70);
+  assert.equal(gpt.origins.get("swe-bench verified").key,"gpt-5-1-latest");
+  assert.equal(gpt.scores.get("gpqa diamond").rating.value,92);
+  // A better reading of a benchmark the primary already scores is taken
+  // from the variant: the lab's lower effort over the vendor's maximum.
+  assert.equal(gpt.scores.get("hle").rating.value,60);
+  assert.equal(gpt.origins.get("hle").key,"gpt-5-1-latest");
+  // The same reading from both cards stays the primary's.
+  assert.equal(gpt.scores.get("aime").rating.value,90);
+  assert.equal(gpt.origins.get("aime").key,"gpt-5-1");
+  // Another name or another vendor is another model.
+  assert.ok(byKey["gpt-5-1-pro"]);
+  assert.ok(byKey["other-vendor"]);
+  // A tag most models have says little: the rare ones are named first.
+  const tagged = wikiModels(wikiGroups([row("a","x","a"), row("b","x","b")], [
+    {key:"a",canonical_name:"A",vendor:"V",ratings:[],tags:["coding","agents","embedding"]},
+    {key:"b",canonical_name:"B",vendor:"V",ratings:[],tags:["agents","coding","vision"]},
+  ]));
+  assert.deepEqual(tagged.map((m) => m.tags), [["embedding","coding","agents"], ["vision","coding","agents"]]);
+  // An unresearched name never folds.
+  assert.ok(byKey["mystery"]);
+  // A link by key, by alias key, by listing id or by a near spelling finds the model.
+  assert.equal(findModel(models,"gpt-5-1").key,"gpt-5-1");
+  assert.equal(findModel(models,"gpt-5-1-latest").key,"gpt-5-1");
+  assert.equal(findModel(models,"~openai/gpt-5.1-latest").key,"gpt-5-1");
+  assert.equal(findModel(models,"GPT-5-1").key,"gpt-5-1");
+  assert.equal(findModel(models,"nope"),null);
+  assert.equal(findModel(models,null),null);
+});
+
+test("benchmarks are families with a head count, split by index version and by whose scale", () => {
+  const row = (k,p,id) => ({knowledge_key:k, provider_id:p, upstream_id:id, context_tokens:null});
+  const r = (metric,value,source="Artificial Analysis",as_of="2026-10") => ({metric,value,source,as_of});
+  const models = wikiModels(wikiGroups(
+    ["a","b","c","d","e","f","g","h","i"].map(k=>row(k,"p",k)),
+    [
+      {key:"a",vendor:"V",ratings:[r("Intelligence Index v5.0.1 (Low effort)",50),r("GPQA Diamond",70),r("Terminal Bench 2.0",30),r("Vendor-only test",99,"V blog")]},
+      {key:"b",vendor:"V",ratings:[r("Intelligence Index v5.0.1 (Low effort)",40),r("GPQA Diamond",60),r("Terminal Bench 4.0",35)]},
+      {key:"c",vendor:"V",ratings:[r("Artificial Analysis Intelligence Index",45),r("GPQA Diamond",65,"V blog")]},
+      // Dated before any v5 sighting: an older scale, even without a version in the name.
+      {key:"d",vendor:"V",ratings:[r("Intelligence Index",68,"Artificial Analysis","2025-05")]},
+      // Another site's index is on another scale.
+      {key:"e",vendor:"V",ratings:[r("Intelligence Index (composite)",88,"TrustTheBench"),r("GPQA Diamond",55)]},
+      {key:"g",vendor:"V",ratings:[r("Latency",1.2)]},
+      {key:"h",vendor:"V",ratings:[r("Latency",0.8)]},
+      {key:"i",vendor:"V",ratings:[r("Overall score",3,"One Site"),r("Overall score",9,"Other Site")]},
+    ]));
+  const options = benchmarks(models);
+  // Most models first; among equals the better-sourced, then the name.
+  assert.deepEqual(options.slice(0,3).map(o=>[o.id,o.count,o.lab]),[
+    ["gpqa diamond",4,3],
+    ["intelligence index v5",3,3],
+    ["latency",2,2]]);
+  assert.deepEqual(options.slice(3).map(o=>o.id).sort(),[
+    "intelligence index before v5",
+    "intelligence index v5 · trustthebench",
+    "one site overall score","other site overall score",
+    "terminal-bench 2.0","terminal-bench 4.0","vendor-only test"].sort());
+  assert.equal(options[1].base,"intelligence index");
+  assert.equal(options[1].latest,"2026-10");
+  // A family fewer than five models were scored on is no default ranking.
+  assert.equal(defaultBenchmark(options.filter(o=>o.count>=2)).id,"gpqa diamond");
+  // The newest version of a composite wins once enough models carry it.
+  const wider = wikiModels(wikiGroups(
+    ["a","b","c","d2","d3","d4","e2","e3"].map(k=>row(k,"p",k)),
+    [
+      {key:"a",vendor:"V",ratings:[r("Intelligence Index v5",50),r("GPQA Diamond",70)]},
+      {key:"b",vendor:"V",ratings:[r("Intelligence Index v5",40),r("GPQA Diamond",60)]},
+      {key:"c",vendor:"V",ratings:[r("Intelligence Index v5",45),r("GPQA Diamond",65)]},
+      {key:"d2",vendor:"V",ratings:[r("Intelligence Index v5",45),r("GPQA Diamond",65)]},
+      {key:"e2",vendor:"V",ratings:[r("Intelligence Index v5",45),r("GPQA Diamond",65)]},
+      {key:"d3",vendor:"V",ratings:[r("Intelligence Index v4.1",68,"Artificial Analysis","2025-05"),r("GPQA Diamond",65)]},
+      {key:"d4",vendor:"V",ratings:[r("Intelligence Index v4.1",66,"Artificial Analysis","2025-05"),r("GPQA Diamond",65)]},
+      {key:"e3",vendor:"V",ratings:[r("Intelligence Index v4.1",64,"Artificial Analysis","2025-05"),r("GPQA Diamond",65)]},
+    ]));
+  const wide = benchmarks(wider);
+  assert.deepEqual(wide.map(o=>o.id),["gpqa diamond","intelligence index v5","intelligence index v4"]);
+  assert.equal(defaultBenchmark(wide).id,"intelligence index v5");
+  assert.deepEqual(vendorOptions(models).map(v=>v.value),["V"]);
+  // The leaderboard is best first, within one version of one scale.
+  assert.deepEqual(leaderboard(models,"intelligence index v5",false).map(r=>r.model.key),["a","c","b"]);
+  assert.deepEqual(leaderboard(models,"intelligence index before v5",false).map(r=>r.model.key),["d"]);
+  assert.deepEqual(leaderboard(models,"latency",false).map(r=>r.model.key),["h","g"]);
+  // Vendor numbers stay out unless asked for, and the glossary knows the families.
+  assert.equal(leaderboard(models,"gpqa diamond",true).length,3);
+  assert.equal(leaderboard(models,"vendor-only test",true).length,0);
+  assert.match(benchmarkInfo("terminal-bench 4.0").what,/shell/);
+  assert.match(benchmarkInfo("intelligence index v5").what,/Artificial Analysis/);
+  assert.equal(benchmarkInfo("intelligence index before v5").what,benchmarkInfo("intelligence index v5").what);
+  assert.equal(lowerIsBetter("latency"),true);
+  assert.equal(lowerIsBetter("gpqa diamond"),false);
+  assert.equal(benchmarkInfo("gpqa diamond").scale,"% correct");
+});
+
+test("the directory filters on text and facets, orders by what was asked, and leaves the unknown last", () => {
+  const row = (k,p,id,ctx=null) => ({knowledge_key:k, provider_id:p, upstream_id:id, context_tokens:ctx});
+  const r = (metric,value) => ({metric,value,source:"Artificial Analysis",as_of:null});
+  const models = wikiModels(wikiGroups(
+    [row("a","one","A",128000),row("b","two","B",200000),row("c","one","C",null),row("d","three","D",64000)],
+    [
+      {key:"a",canonical_name:"Alpha",vendor:"Alpha Labs",description:"Alpha is a coder.",primary_use:"coding assistants",ratings:[r("Intelligence Index",50)],pricing_hint:"$1 per 1M input tokens and $2 per 1M output tokens.",use_cases:["Code"]},
+      {key:"b",canonical_name:"Beta",vendor:"Beta Inc",ratings:[r("Intelligence Index",70),r("GPQA Diamond",90)],pricing:{currency:"USD",input_per_1m:0.25,cached_input_per_1m:null,output_per_1m:1,note:null},tags:["vision"]},
+      {key:"c",canonical_name:"Gamma",vendor:"Beta Inc",ratings:[r("GPQA Diamond",95)],pricing:{currency:"USD",input_per_1m:0,cached_input_per_1m:null,output_per_1m:0,note:null}},
+      // No summary for "d": the index only answers for keys with a card.
+    ]));
+  const keys = (filters, sort, bench) => wikiResults(models,filters,sort,bench).rows.map(m=>m.key);
+  // Score order: scored first, best first; the unscored models follow by
+  // name, whatever the column's direction.
+  const top = wikiResults(models,{},"score","intelligence index");
+  assert.deepEqual(top.rows.map(m=>m.key),["b","a","d","c"]);
+  assert.deepEqual([...top.places],[["b",1],["a",2]]);
+  assert.equal(top.measured,2);
+  assert.deepEqual(keys({},"score-asc","intelligence index"),["a","b","d","c"]);
+  // Nobody was measured on it: the honest order is by name.
+  assert.deepEqual(keys({},"score","latency"),["a","b","d","c"]);
+  assert.deepEqual(keys({},"name",null),["a","b","d","c"]);
+  // Facets.
+  assert.deepEqual(keys({connection:"one"},"name",null),["a","c"]);
+  // Vendors are compared by their canonical name.
+  assert.deepEqual(keys({vendor:"Beta"},"name",null),["b","c"]);
+  assert.deepEqual(keys({vendor:"Beta Inc"},"name",null),[]);
+  assert.deepEqual(keys({tag:"coding"},"name",null),["a"]);
+  assert.deepEqual(keys({tag:"cheap"},"name",null),["b","c"]);
+  assert.deepEqual(keys({research:"missing"},"name",null),["d"]);
+  assert.deepEqual(keys({query:"beta"},"name",null),["b","c"]);
+  assert.deepEqual(keys({query:"two b"},"name",null),["b"]);
+  assert.deepEqual(keys({query:"zzz"},"name",null),[]);
+  // Largest context first, and a listing with no context last.
+  assert.deepEqual(keys({},"context",null),["b","a","d","c"]);
+  // Cheapest first: free, then cheap, then dear, then no price.
+  assert.deepEqual(keys({},"price",null),["c","b","a","d"]);
+});
+
+test("a tag is stated or read from a use case, never invented", () => {
+  assert.deepEqual(tagsOf({ratings:[],tags:["Coding","vision","nonsense"]}),["coding","vision"]);
+  assert.deepEqual(tagsOf({ratings:[],tags:[] ,primary_use:"",description:"",pricing_hint:"$0.10 per 1M input tokens and $0.50 per 1M output tokens."},"Repository editing and tool calls"),
+    ["coding","cheap"]);
+  // "Tool calls" is not an agent use: the use is read strictly.
+  assert.deepEqual(tagsOf({ratings:[]},"Multi-step agents"),["agents"]);
+  assert.deepEqual(tagsOf({ratings:[],tags:["vision"],pricing_hint:"$0.10 per 1M input tokens and $0.50 per 1M output tokens."},"coding"),
+    ["vision","cheap"]);
+  assert.deepEqual(tagsOf({ratings:[]},null),[]);
+  assert.deepEqual(tagsOf({ratings:[],open_weights:true},""),["open-weights"]);
+});
+
+test("Wiki survives cards and queries the schema forbids: a bad card never blanks the page", () => {
+  // A reader meets whatever a researcher once wrote: nulls where strings
+  // belong, notes without a name, versions without numbers.
+  const odd = [
+    null, undefined, {}, { ratings: null }, { description: null, canonical_name: undefined, tags: "coding", pricing: "x", speed: [], context_window: "1M", release_date: 2026 },
+    { ratings: [{ metric: null, value: null, source: null }] },
+    { ratings: [{ metric: "", value: NaN }] },
+    { ratings: [{ metric: "Intelligence Index v", value: 1 }] },
+    { ratings: [{ metric: "GPQA", value: 1, note: "effort" }] },
+    { ratings: [{ metric: "GPQA", value: 1, note: "max reasoning" }] },
+    { ratings: [{ metric: "GPQA", value: 1, note: "reasoning effort set to XHigh" }] },
+    { ratings: [{ metric: "GPQA (max)", value: 1, note: null, source: "" }] },
+  ];
+  for (const card of odd) {
+    const safe = card ?? { ratings: [] };
+    assert.doesNotThrow(() => { modelSpecs(safe); parsePricing(safe); splitDescription(safe); tagsOf(safe, undefined); scoresOf(safe.ratings, undefined); });
+  }
+  // The effort a note states is the variant a score is read under.
+  assert.equal(benchmarkOf({ metric: "GPQA", value: 1, source: "Artificial Analysis", note: "max reasoning effort", as_of: null }).variant, "max effort");
+  assert.equal(benchmarkOf({ metric: "GPQA", value: 1, source: "Artificial Analysis", note: "default reasoning effort max; v5", as_of: null }).variant, "max effort");
+  assert.equal(benchmarkOf({ metric: "GPQA", value: 1, source: "Artificial Analysis", note: "effort", as_of: null }).variant, null);
+  const rows = [{ provider_id: "p", upstream_id: "odd", knowledge_key: "odd", context_tokens: null }];
+  const models = wikiModels(wikiGroups(rows, odd.slice(4).map((card, i) => ({ key: "odd", ratings: [], ...card, key: i === 0 ? "odd" : `odd-${i}` }))));
+  const all = [...models, ...wikiModels(wikiGroups([], []))];
+  for (const q of ["", "zzz qq", "' \" <script>", "κimi", "-", "  ", "~x/y"]) {
+    for (const sort of ["score", "score-asc", "name", "context", "connections", "release", "price", "speed"]) {
+      assert.doesNotThrow(() => wikiResults(all, { query: q }, sort, benchmarks(all)[0]?.id ?? null));
+    }
+  }
+  assert.equal(findModel([], "x"), null);
+  assert.equal(defaultBenchmark([]), undefined);
+});
+
+test("the lead sentence does not repeat the title, starts capitalized, and is about the model", () => {
+  const lead = splitDescription({ratings:[],canonical_name:"DeepSeek V3.2 Thinking",description:"DeepSeek V3.2 Thinking is the reasoning mode of V3.2. It always reasons."});
+  assert.deepEqual(lead,{lead:"The reasoning mode of V3.2.",rest:"It always reasons."});
+  // An old card that opens with how the alias resolves leads with the model instead.
+  const alias = splitDescription({ratings:[],canonical_name:"GPT-6.2 Astra",description:"OpenRouter's openai/gpt-6.2-astra entry resolves to OpenAI's GPT-6.2 Astra, a flagship reasoning model. It is the strongest coding model of the family. It costs $8 per 1M input tokens."});
+  assert.equal(alias.lead,"It is the strongest coding model of the family.");
+  assert.equal(alias.rest,"OpenRouter's openai/gpt-6.2-astra entry resolves to OpenAI's GPT-6.2 Astra, a flagship reasoning model. It costs $8 per 1M input tokens.");
+  // Nothing better to lead with: the opening stays.
+  const only = splitDescription({ratings:[],description:"The catalog alias auto resolves to the routing capability of the provider."});
+  assert.equal(only.lead,"The catalog alias auto resolves to the routing capability of the provider.");
 });
 
 test("Request timeline preserves quiet minutes, unknown outcomes and exclusive edge bounds", () => {
@@ -191,6 +413,40 @@ test("small charges, reported zero and unknown cost stay distinct", () => {
   assert.equal(Number(money(0.0000012)), 0.0000012);
   assert.equal(money(0), "0.00");
   assert.equal(money(null), "—");
+});
+
+test("a count takes the largest unit that keeps three digits", () => {
+  assert.equal(compact(null), "—");
+  assert.equal(compact(23), "23");
+  assert.equal(compact(3.006), "3.01");
+  // A duration keeps its hundredths below a thousand.
+  assert.equal(compact(12.3456), "12.35");
+  assert.equal(compact(0.0123), "0.0123");
+  assert.equal(compact(1000), "1K");
+  assert.equal(compact(287_551), "288K");
+  assert.equal(compact(94_260), "94.3K");
+  assert.equal(compact(1_100_000), "1.1M");
+  // Billions roll over instead of reading as thousands of millions.
+  assert.equal(compact(9_426_500_000), "9.43B");
+  assert.equal(compact(11_000_000_000), "11B");
+  assert.equal(compact(2_400_000_000_000), "2.4T");
+  assert.equal(compact(2400 * 1e12), "2400T");
+  // Whole thousands and millions keep their zeros.
+  assert.equal(compact(10_000), "10K");
+  assert.equal(compact(10_000_000), "10M");
+  assert.equal(compact(150_000), "150K");
+  assert.equal(compact(-1_153_400_000), "-1.15B");
+});
+
+test("time left appears once a job has a pace", () => {
+  const start = 1_000;
+  // One or two units say nothing about the pace of four hundred.
+  assert.equal(eta(start, 2, 439, start + 60), null);
+  assert.equal(eta(null, 20, 439, start + 600), null);
+  assert.equal(eta(start, 439, 439, start + 6000), null);
+  // 20 units in 600 s is 30 s each; 419 remain.
+  assert.equal(eta(start, 20, 439, start + 600), "about 3h 29m left");
+  assert.equal(eta(start, 400, 439, start + 12_000), "about 19m left");
 });
 
 test("unpriced tokens keep each provider's rate and unit", () => {
@@ -701,11 +957,17 @@ test("task evidence compares like measurements, not logo design or overall codin
     {key:"d",ratings:[rating("WebDev Elo",1250),rating("WebDev Elo",1300)]}];
   const run=(goal,e,bans=[])=>poolSuggestions(rows,[],[],"",goal,"","",bans,0,e.byKey);
   const ui=poolEvidence(rows,cards,"design","");
-  assert.equal(ui.options.length,2);assert.equal(ui.metric.count,2);assert.equal(ui.byKey.get("d").result,undefined);
-  assert.equal(ui.byKey.get("c").task,null);assert.deepEqual(run("design",ui).slice(0,2).map(r=>r.model.upstream_id),["b","a"]);
-  const alt=poolEvidence(rows,cards,"design",JSON.stringify(["Other lab","WebDev Elo"]));assert.equal(run("design",alt)[0].model.upstream_id,"c");
+  // One benchmark family is one column, whoever measured it: Coding Index and Logo Elo are not design tests.
+  assert.equal(ui.options.length,1);assert.equal(ui.metric.id,"webdev arena elo");assert.equal(ui.metric.count,4);
+  assert.equal(ui.byKey.get("c").task,null);
+  assert.equal(ui.byKey.get("d").result.rating.value,1250);
+  // Evidence ranks by the design score, all four models included.
+  assert.deepEqual(run("design",ui).slice(0,4).map(r=>r.model.upstream_id),["c","d","b","a"]);
+  // A requested benchmark the goal does not allow falls back to the allowed one.
+  assert.equal(poolEvidence(rows,cards,"design","coding index").metric.id,"webdev arena elo");
+  const alt=poolEvidence(rows,cards,"design","webdev arena elo");
   assert.equal(poolSuggestions(rows,[],[],"","design","","",[],0,alt.byKey,true)[0].model.upstream_id,"b");
-  const vis=poolEvidence(rows,cards,"vision","");assert.equal(vis.options.length,1);assert.equal(vis.byKey.get("b").result.value,0);
+  const vis=poolEvidence(rows,cards,"vision","");assert.equal(vis.options.length,1);assert.equal(vis.byKey.get("b").result.rating.value,0);
   assert.equal(run("vision",vis)[0].model.upstream_id,"b");assert.equal(run("vision",vis,[{...rows[1],expires_at_unix:9}]).at(-1).model.upstream_id,"b");
   assert.equal(poolEvidence(rows,[],"vision","").metric,undefined);
 });

@@ -110,6 +110,26 @@ export type KnowledgeRating = {
   value: number;
   as_of: string | null;
   note: string | null;
+  /// The page that shows this number, when the researcher cited one.
+  url?: string | null;
+};
+
+/// List prices per one million tokens, as the newer research schema reports
+/// them. Older cards carry only the `pricing_hint` sentence.
+export type KnowledgePricing = {
+  currency: string | null;
+  input_per_1m: number | null;
+  cached_input_per_1m: number | null;
+  output_per_1m: number | null;
+  note: string | null;
+};
+
+/// Measured speed, with who measured it.
+export type KnowledgeSpeed = {
+  output_tokens_per_second: number | null;
+  time_to_first_token_seconds: number | null;
+  source: string | null;
+  as_of: string | null;
 };
 
 export type KnowledgeCard = {
@@ -126,9 +146,42 @@ export type KnowledgeCard = {
   ratings: KnowledgeRating[];
   family_line: string | null;
   sources: string[];
+  // Added by the second research schema; absent (or null) on older cards.
+  pricing?: KnowledgePricing | null;
+  input_modalities?: string[] | null;
+  output_modalities?: string[] | null;
+  max_output_tokens?: number | null;
+  parameters?: string | null;
+  license?: string | null;
+  open_weights?: boolean | null;
+  knowledge_cutoff?: string | null;
+  reasoning?: "always" | "optional" | "none" | null;
+  tool_calling?: boolean | null;
+  structured_output?: boolean | null;
+  /// What an alias or a moving pointer serves, e.g. "GLM-5.3-20260930".
+  snapshot?: string | null;
+  /// What the model is for, from a fixed vocabulary.
+  tags?: string[] | null;
+  speed?: KnowledgeSpeed | null;
 };
 
-export type ModelSummary = Pick<KnowledgeCard, "canonical_name" | "vendor" | "release_date" | "ratings"> & {
+export type ModelSummary = Pick<KnowledgeCard, "canonical_name" | "vendor" | "release_date" | "ratings"> &
+  // A core that predates a field leaves it out.
+  Partial<
+    Pick<
+      KnowledgeCard,
+      | "context_window"
+      | "max_output_tokens"
+      | "input_modalities"
+      | "output_modalities"
+      | "license"
+      | "open_weights"
+      | "pricing"
+      | "pricing_hint"
+      | "tags"
+      | "speed"
+    >
+  > & {
   key: string;
   description: string | null;
   primary_use?: string | null;
@@ -150,6 +203,8 @@ export type ModelKnowledge = {
   key: string;
   card: KnowledgeCard | null;
   collected_at_unix: number | null;
+  /// What produced the card, e.g. "deepseek/deepseek-flash+websearch".
+  generator?: string | null;
   fresh: boolean;
   max_age_secs: number;
   catalog_entries: CatalogEntry[];
@@ -170,6 +225,38 @@ export type CollectKnowledgeQuery = {
   providerId: string;
   upstreamId: string;
   force?: boolean;
+};
+
+/// Progress of "research every card". The job runs on the core, so it
+/// outlives the page that started it; `done` reaches `total` either way.
+export type ResearchStatus = {
+  running: boolean;
+  total: number;
+  done: number;
+  updated: number;
+  failed: number;
+  skipped: number;
+  /// Keys being researched right now.
+  current: string[];
+  /// The most recent failures; the event log has them all.
+  errors: { key: string; error: string }[];
+  cancel_requested: boolean;
+  started_at_unix: number | null;
+  finished_at_unix: number | null;
+};
+
+export const IDLE_RESEARCH: ResearchStatus = {
+  running: false,
+  total: 0,
+  done: 0,
+  updated: 0,
+  failed: 0,
+  skipped: 0,
+  current: [],
+  errors: [],
+  cancel_requested: false,
+  started_at_unix: null,
+  finished_at_unix: null,
 };
 
 export type Observation = {
@@ -390,6 +477,9 @@ export type Api = {
   modelSummaries: (keys: string[], signal?: AbortSignal) => Promise<ModelSummary[]>;
   modelKnowledge: (upstreamId: string) => Promise<ModelKnowledge>;
   collectKnowledge: (query: CollectKnowledgeQuery) => Promise<CollectKnowledgeResult>;
+  researchStatus: () => Promise<ResearchStatus>;
+  startResearch: (force: boolean) => Promise<ResearchStatus>;
+  cancelResearch: () => Promise<ResearchStatus>;
 };
 
 function usagePeriodParams(period: UsagePeriod): URLSearchParams {
@@ -518,6 +608,15 @@ const realApi: Api = {
       method: "POST",
       body: JSON.stringify({ provider_id: providerId, upstream_id: upstreamId, force }),
     }),
+
+  researchStatus: () => call<ResearchStatus>("/v1/management/models/knowledge/research"),
+  startResearch: (force: boolean) =>
+    call<ResearchStatus>("/v1/management/models/knowledge/research", {
+      method: "POST",
+      body: JSON.stringify({ force }),
+    }),
+  cancelResearch: () =>
+    call<ResearchStatus>("/v1/management/models/knowledge/research", { method: "DELETE" }),
 };
 
 /// Mock mode serves the same shapes from memory so the UI can be designed

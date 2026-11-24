@@ -93,15 +93,30 @@ impl KnowledgeStore {
             .conn
             .lock()
             .map_err(|_| StorageError("knowledge storage unavailable".into()))?;
+        // Cards collected before the structured fields exist carry only
+        // prose: the Wiki reads prices and specs out of that prose, so the
+        // two sentences it needs travel with every summary. `->` keeps a
+        // JSON value as JSON (a list, an object, true); json_extract would
+        // turn `true` into 1.
         let query = "SELECT json_object('key', w.value,
                    'canonical_name', json_extract(card_json, '$.canonical_name'),
                    'vendor', json_extract(card_json, '$.vendor'),
-                   'description', substr(json_extract(card_json, '$.description'), 1, 320),
+                   'description', substr(json_extract(card_json, '$.description'), 1, 600),
                    'modality', substr(json_extract(card_json, '$.modality'), 1, 160),
                    'primary_use', CASE WHEN json_type(card_json, '$.use_cases[0]') = 'text'
                        THEN substr(json_extract(card_json, '$.use_cases[0]'), 1, 160) END,
                    'release_date', json_extract(card_json, '$.release_date'),
-                   'ratings', json_extract(card_json, '$.ratings'))
+                   'context_window', card_json -> '$.context_window',
+                   'max_output_tokens', card_json -> '$.max_output_tokens',
+                   'input_modalities', card_json -> '$.input_modalities',
+                   'output_modalities', card_json -> '$.output_modalities',
+                   'license', json_extract(card_json, '$.license'),
+                   'open_weights', card_json -> '$.open_weights',
+                   'tags', card_json -> '$.tags',
+                   'speed', card_json -> '$.speed',
+                   'pricing', card_json -> '$.pricing',
+                   'pricing_hint', substr(json_extract(card_json, '$.pricing_hint'), 1, 600),
+                   'ratings', card_json -> '$.ratings')
                FROM json_each(?1) w JOIN model_knowledge m ON m.key = coalesce(
                    (SELECT key FROM model_knowledge WHERE key = w.value),
                    (SELECT key FROM model_knowledge WHERE replace(key, '-', '') = replace(w.value, '-', '')
@@ -258,6 +273,51 @@ mod tests {
         }
         let s = KnowledgeStore::new(Connection::open(&path).unwrap()).unwrap();
         assert!(s.get("k").unwrap().is_some());
+    }
+
+    #[test]
+    fn summaries_carry_price_and_specs_and_nulls_for_old_cards() {
+        let s = store();
+        s.upsert(&NewCard {
+            key: "new-card".into(),
+            card_json: r#"{"description":"A model.","pricing":{"currency":"USD","input_per_1m":1.5,"cached_input_per_1m":null,"output_per_1m":6,"note":null},"pricing_hint":"$1.50 in, $6 out.","context_window":200000,"max_output_tokens":32000,"input_modalities":["text","image"],"license":"Apache 2.0","open_weights":true,"ratings":[{"source":"Lab","metric":"GPQA Diamond","value":80}]}"#.into(),
+            collected_at_unix: 1,
+            generator: "g".into(),
+        })
+        .unwrap();
+        // Collected before the structured fields existed: prose only.
+        s.upsert(&NewCard {
+            key: "old-card".into(),
+            card_json: r#"{"description":"An old model.","modality":"text","pricing_hint":"$8 per 1M input tokens and $40 per 1M output tokens.","ratings":[]}"#.into(),
+            collected_at_unix: 1,
+            generator: "g".into(),
+        })
+        .unwrap();
+        let rows = s
+            .summaries(&["newcard".into(), "old-card".into(), "absent".into()])
+            .unwrap();
+        assert_eq!(rows.len(), 2);
+        let new = rows.iter().find(|r| r["key"] == "newcard").unwrap();
+        assert_eq!(new["pricing"]["input_per_1m"], 1.5);
+        assert_eq!(new["pricing"]["output_per_1m"], 6);
+        assert!(new["pricing"]["cached_input_per_1m"].is_null());
+        assert_eq!(new["context_window"], 200000);
+        assert_eq!(new["max_output_tokens"], 32000);
+        assert_eq!(
+            new["input_modalities"],
+            serde_json::json!(["text", "image"])
+        );
+        assert_eq!(new["license"], "Apache 2.0");
+        assert_eq!(new["open_weights"], true);
+        assert_eq!(new["ratings"][0]["metric"], "GPQA Diamond");
+        let old = rows.iter().find(|r| r["key"] == "old-card").unwrap();
+        assert!(old["pricing"].is_null());
+        assert!(old["max_output_tokens"].is_null());
+        assert!(old["license"].is_null());
+        assert_eq!(
+            old["pricing_hint"],
+            "$8 per 1M input tokens and $40 per 1M output tokens."
+        );
     }
 
     #[test]

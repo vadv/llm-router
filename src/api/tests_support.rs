@@ -122,6 +122,7 @@ fn state_with_keys(
             crate::storage::knowledge::KnowledgeStore::new(conn()).unwrap(),
         ),
         knowledge_cfg: None,
+        research: Mutex::new(None),
         balances: Mutex::new(crate::storage::balances::BalanceStore::new(conn()).unwrap()),
         catalog_refresh: Mutex::new(HashMap::new()),
         refresh_running: std::sync::atomic::AtomicBool::new(false),

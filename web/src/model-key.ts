@@ -2,6 +2,8 @@
 // catalog row carries `knowledge_key` and every card answer carries `key`.
 // The UI treats those as opaque strings and never re-implements the core's
 // normalization rule.
+// The .ts extension keeps this module loadable by the Node self-checks.
+import { canonicalVendor } from "./model-facts.ts";
 
 /// Group API rows by the key the core assigned. No key is computed here.
 export function groupByKnowledgeKey<T extends { knowledge_key: string }>(rows: T[]): Map<string, T[]> {
@@ -41,29 +43,30 @@ export function safeHttpUrl(raw: string): string | null {
   }
 }
 
-const VENDOR_COLORS: [RegExp, string][] = [
-  [/anthropic|claude/, "orange"],
-  [/openai|gpt/, "teal"],
-  [/google|gemini|gemma/, "blue"],
-  [/deepseek/, "indigo"],
-  [/alibaba|qwen|dashscope/, "violet"],
-  [/z\.?ai|zhipu|glm/, "cyan"],
-  [/moonshot|kimi/, "grape"],
-  [/meta|llama/, "blue"],
-  [/mistral/, "yellow"],
-  [/xai|grok/, "gray"],
-  [/nvidia/, "green"],
-  [/microsoft|phi/, "cyan"],
+// By canonical vendor, so every spelling of one vendor gets one colour.
+const VENDOR_COLORS: [string, string][] = [
+  ["Anthropic", "orange"],
+  ["OpenAI", "teal"],
+  ["Google", "blue"],
+  ["DeepSeek", "indigo"],
+  ["Z.ai", "cyan"],
+  ["Alibaba", "violet"],
+  ["Moonshot AI", "grape"],
+  ["Meta", "pink"],
+  ["xAI", "yellow"],
+  ["NVIDIA", "green"],
+  ["Microsoft", "lime"],
 ];
+const PALETTE = ["teal", "blue", "grape", "cyan", "orange", "violet", "pink", "green"];
 
-/// A stable badge color for a vendor. Unknown vendors still get a stable
-/// color from their name instead of an arbitrary one.
+/// A stable badge colour for a vendor. Vendors the list does not name still
+/// get a stable colour from their name instead of an arbitrary one.
 export function vendorColor(vendor: string | null | undefined): string {
   if (!vendor) return "gray";
-  const name = vendor.toLowerCase();
-  const hit = VENDOR_COLORS.find(([pattern]) => pattern.test(name));
+  const name = canonicalVendor(vendor) ?? vendor;
+  const hit = VENDOR_COLORS.find(([known]) => known === name);
   if (hit) return hit[1];
   let hash = 0;
-  for (const char of vendor) hash = (hash * 31 + char.charCodeAt(0)) % 997;
-  return ["teal", "blue", "grape", "cyan", "orange", "violet", "pink", "green"][hash % 8];
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) % 997;
+  return PALETTE[hash % PALETTE.length];
 }

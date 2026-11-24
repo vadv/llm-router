@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   AppShell,
+  Box,
   Burger,
   Button,
   Modal,
@@ -9,10 +10,13 @@ import {
   useComputedColorScheme,
   useMantineColorScheme,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import {
   IconActivityHeartbeat,
   IconArrowRight,
   IconArrowsExchange,
+  IconBook,
+  IconBolt,
   IconChevronRight,
   IconCommand,
   IconKey,
@@ -23,8 +27,8 @@ import {
   IconSun,
   IconTerminal2,
 } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
-import { MOCK, keyStore, type Health } from "../api";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { MOCK, api, keyStore, type Health, type LiveCatalogModel } from "../api";
 import {
   CADENCES,
   setCadence,
@@ -34,7 +38,7 @@ import {
 } from "../hooks";
 import { uptime } from "../format";
 import { COMPONENTS } from "../pages/overview";
-import { findCommands, sections, shortcuts } from "./workspace-commands";
+import { findCommands, isAction, shortcuts, type CommandAction } from "./workspace-commands";
 import "./workspace-chrome.css";
 
 export type Destination = {
@@ -44,9 +48,52 @@ export type Destination = {
 };
 type Tool = "jump" | "system" | "connection";
 
+// The catalog is read for model search and kept for a few minutes, so the
+// command menu opens without a request each time.
+const CATALOG_TTL = 5 * 60_000;
+let catalogCache: { at: number; rows: LiveCatalogModel[] } | null = null;
+function loadCatalog(): Promise<LiveCatalogModel[]> {
+  if (catalogCache && Date.now() - catalogCache.at < CATALOG_TTL)
+    return Promise.resolve(catalogCache.rows);
+  return api
+    .catalog()
+    .then((rows) => {
+      catalogCache = { at: Date.now(), rows };
+      return rows;
+    })
+    .catch(() => catalogCache?.rows ?? []);
+}
+
+/// The models of the catalog that answer to a query, one row per model.
+function findModels(rows: LiveCatalogModel[], query: string): LiveCatalogModel[] {
+  const needle = query.trim().toLowerCase();
+  if (needle.length < 2) return [];
+  const seen = new Set<string>();
+  const rank = (row: LiveCatalogModel) =>
+    row.knowledge_key.toLowerCase().startsWith(needle) ||
+    row.upstream_id.toLowerCase().split("/").pop()!.startsWith(needle)
+      ? 0
+      : 1;
+  return rows
+    .filter((row) => {
+      const hit =
+        !seen.has(row.knowledge_key) &&
+        (row.knowledge_key.toLowerCase().includes(needle) ||
+          row.upstream_id.toLowerCase().includes(needle));
+      if (hit) seen.add(row.knowledge_key);
+      return hit;
+    })
+    .sort(
+      (a, b) =>
+        rank(a) - rank(b) ||
+        a.knowledge_key.localeCompare(b.knowledge_key) ||
+        a.provider_id.localeCompare(b.provider_id),
+    )
+    .slice(0, 6);
+}
+
 export function WorkspaceChrome({
   nav,
-  route,
   navOpened,
   toggleNav,
   closeNav,
@@ -54,7 +101,6 @@ export function WorkspaceChrome({
   lock,
 }: {
   nav: Destination[];
-  route: Route;
   navOpened: boolean;
   toggleNav: () => void;
   closeNav: () => void;
@@ -63,6 +109,7 @@ export function WorkspaceChrome({
 }) {
   const [tool, setTool] = useState<Tool | null>(null),
     [query, setQuery] = useState(""),
+    [models, setModels] = useState<LiveCatalogModel[]>([]),
     [active, setActive] = useState(0),
     [checking, setChecking] = useState(false),
     [confirm, setConfirm] = useState(false);
@@ -73,16 +120,7 @@ export function WorkspaceChrome({
       "dark";
   const endpointField = useRef<HTMLInputElement>(null),
     [copyState, setCopyState] = useState("");
-  async function copyEndpoint() {
-    try {
-      await navigator.clipboard.writeText(endpoint);
-      setCopyState("Copied API base URL.");
-    } catch {
-      endpointField.current?.focus();
-      endpointField.current?.select();
-      setCopyState("Clipboard unavailable. Copy the selected URL manually.");
-    }
-  }
+  const endpoint = `${window.location.origin}/v1`;
   const close = () => {
     setTool(null);
     setConfirm(false);
@@ -92,8 +130,64 @@ export function WorkspaceChrome({
     closeNav();
     setQuery("");
     setActive(0);
+    setModels([]);
     setConfirm(false);
     setTool(next);
+  };
+  const run = (action: CommandAction) => {
+    switch (action) {
+      case "system":
+      case "connection":
+        open(action);
+        return;
+      case "theme":
+        setColorScheme(dark ? "light" : "dark");
+        return;
+      case "copy-api":
+        void copyEndpoint(true);
+        return;
+      case "refresh-balances":
+      case "refresh-catalog": {
+        const what = action === "refresh-balances" ? "balances" : "catalog";
+        const label = what === "balances" ? "Balances" : "Model catalogs";
+        api
+          .refresh(what)
+          .then(() =>
+            notifications.show({
+              message: `${label} refresh requested. The core runs it in the background.`,
+            }),
+          )
+          .catch((failure: unknown) =>
+            notifications.show({
+              color: "red",
+              message: failure instanceof Error ? failure.message : String(failure),
+            }),
+          );
+        return;
+      }
+    }
+  };
+  async function copyEndpoint(fromMenu = false) {
+    try {
+      await navigator.clipboard.writeText(endpoint);
+      if (fromMenu)
+        notifications.show({ message: "API base URL copied." });
+      else setCopyState("Copied API base URL.");
+    } catch {
+      endpointField.current?.focus();
+      endpointField.current?.select();
+      if (fromMenu) open("connection");
+      setCopyState("Clipboard unavailable. Copy the selected URL manually.");
+    }
+  }
+  const choose = (target: string) => {
+    if (isAction(target)) {
+      run(target);
+      if (target === "copy-api") close();
+      return;
+    }
+    close();
+    window.location.hash = target;
   };
   useEffect(() => {
     function shortcut(e: KeyboardEvent) {
@@ -117,12 +211,26 @@ export function WorkspaceChrome({
       closeNav();
       setQuery("");
       setActive(0);
+      setModels([]);
       setTool("jump");
     }
     window.addEventListener("keydown", shortcut);
     return () => window.removeEventListener("keydown", shortcut);
   }, [tool, closeNav]);
-  const destination = nav.find((n) => n.route === route)!;
+  // Model results follow the query; a late answer for an older query is dropped.
+  useEffect(() => {
+    if (tool !== "jump") return;
+    let current = true;
+    if (query.trim().length < 2) setModels([]);
+    else
+      void loadCatalog().then((rows) => {
+        if (current) setModels(findModels(rows, query));
+      });
+    return () => {
+      current = false;
+    };
+  }, [tool, query]);
+
   const data = health.data,
     failed = !!health.error,
     state = failed
@@ -147,16 +255,29 @@ export function WorkspaceChrome({
       })
     : "Not checked";
   const keys = MOCK ? "demo" : keyStore.scope();
-  const endpoint = `${window.location.origin}/v1`;
   const options = findCommands(nav, query);
-  function choose(target: string) {
-    if (target === "system" || target === "connection") {
-      open(target);
-      return;
-    }
-    close();
-    window.location.hash = target;
-  }
+  const entries: { key: string; kind: "command" | "model"; label: string; detail: string; icon: ReactNode; choose: () => void }[] =
+    [
+      ...options.map((o) => ({
+        key: o.target,
+        kind: "command" as const,
+        label: o.label,
+        detail: o.detail,
+        icon: isAction(o.target) && o.target !== "system" && o.target !== "connection" ? <IconBolt size={15} /> : shortcuts.includes(o) ? <IconTerminal2 size={15} /> : <IconArrowRight size={15} />,
+        choose: () => choose(o.target),
+      })),
+      ...models.map((row) => ({
+        key: `model:${row.provider_id}/${row.upstream_id}`,
+        kind: "model" as const,
+        label: row.knowledge_key,
+        detail: `Model · ${row.provider_id} / ${row.upstream_id}`,
+        icon: <IconBook size={15} />,
+        choose: () => {
+          close();
+          window.location.hash = `#/wiki?model=${encodeURIComponent(row.upstream_id)}`;
+        },
+      })),
+    ];
   async function check() {
     setChecking(true);
     try {
@@ -180,153 +301,112 @@ export function WorkspaceChrome({
             hiddenFrom="sm"
             size="sm"
           />
-          <a
+          <Box
+            component="a"
             className="ws-brand"
             href="#/overview"
             onClick={closeNav}
+            hiddenFrom="sm"
             aria-label="Router overview"
           >
             <span className="ws-mark">
-              <IconArrowsExchange size={21} stroke={1.9} />
+              <IconArrowsExchange size={17} stroke={2} />
             </span>
             <strong>llm-router</strong>
-          </a>
-          <div className="ws-trail">
-            <span>{sections[route]}</span>
-            <IconChevronRight size={12} />
-            <b>{destination.label}</b>
-          </div>
+          </Box>
           <button
             className="ws-jump"
             aria-label="Open command menu"
-            title={`Jump to a page or task (${shortcutKey})`}
+            title={`Search, jump or run a task (${shortcutKey})`}
             onClick={() => open("jump")}
           >
-            <IconSearch size={16} />
-            <span>Jump to a page or task</span>
+            <IconSearch size={15} />
+            <span>Search models, pages and tasks</span>
             <kbd>{shortcutKey}</kbd>
           </button>
           <button
             className="ws-health"
             data-state={state}
-            aria-label={`Inspect system health: ${status}`}
-            title={`Last successful health read: ${checked}`}
+            aria-label={`System health: ${status}. Open details`}
+            title={failed ? "The last health check failed" : `Last health read ${checked}`}
             onClick={() => open("system")}
           >
             <i />
             <span>{status}</span>
-            <IconChevronRight size={12} />
           </button>
+          <button
+            className="ws-instance"
+            onClick={() => open("connection")}
+            aria-label="Connection and session"
+            title="API endpoint and browser session"
+          >
+            <IconTerminal2 size={15} />
+            <span>{MOCK ? "Demo" : window.location.host}</span>
+            <IconChevronRight size={12} className="ws-instance-chevron" />
+          </button>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="sm"
+            aria-label="toggle color scheme"
+            title={dark ? "Light theme" : "Dark theme"}
+            onClick={() => setColorScheme(dark ? "light" : "dark")}
+          >
+            {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
+          </ActionIcon>
         </div>
       </AppShell.Header>
-      <AppShell.Footer className="ws-footer">
-        <button
-          className="ws-instance"
-          onClick={() => open("connection")}
-          aria-label="Open connection tools"
-        >
-          <IconTerminal2 size={16} />
-          <strong>{MOCK ? "Demo workspace" : window.location.host}</strong>
-          <IconChevronRight size={12} />
-        </button>
-        <span className="ws-footer-space" />
-        <span className="ws-checked">
-          Health read{" "}
-          <time
-            title={
-              health.updatedAt
-                ? new Date(health.updatedAt).toLocaleString()
-                : undefined
-            }
-          >
-            {checked}
-          </time>
-        </span>
-        <button
-          className="ws-poll"
-          onClick={() => open("system")}
-          aria-label="Polling settings"
-        >
-          <IconRefresh size={13} />
-          {cadence ? `Poll ${cadence / 1000}s` : "Polling off"}
-        </button>
-        <button
-          className="ws-session"
-          onClick={() => open("connection")}
-          aria-label="Session details"
-        >
-          <IconKey size={14} />
-          <span>
-            {keys === "browser"
-              ? "Browser key"
-              : keys === "tab"
-                ? "Tab key"
-                : keys === "demo"
-                  ? "Demo"
-                  : "No key"}
-          </span>
-        </button>
-        <ActionIcon
-          variant="subtle"
-          color="gray"
-          aria-label="toggle color scheme"
-          title={dark ? "Light theme" : "Dark theme"}
-          onClick={() => setColorScheme(dark ? "light" : "dark")}
-        >
-          {dark ? <IconSun size={16} /> : <IconMoon size={16} />}
-        </ActionIcon>
-      </AppShell.Footer>
+
       <Modal
         opened={tool !== null}
         onClose={close}
         centered
-        size="33rem"
-        classNames={{ content: "ws-modal" }}
+        size="32rem"
+        withCloseButton={tool !== "jump"}
+        classNames={{
+          content: tool === "jump" ? "ws-modal ws-modal-command" : "ws-modal",
+          header: "ws-modal-header",
+          title: "ws-modal-title",
+        }}
         title={
-          <span className="ws-modal-title">
-            {tool === "jump" ? (
-              <IconCommand />
-            ) : tool === "system" ? (
-              <IconActivityHeartbeat />
-            ) : (
-              <IconPlugConnected />
-            )}
-            {tool === "jump"
-              ? "Command menu"
-              : tool === "system"
-                ? "System inspector"
-                : "Connection tools"}
-          </span>
+          tool === "system" ? (
+            <span className="ws-modal-title">
+              <IconActivityHeartbeat /> System health
+            </span>
+          ) : tool === "connection" ? (
+            <span className="ws-modal-title">
+              <IconPlugConnected /> Connection
+            </span>
+          ) : undefined
         }
       >
         {tool === "jump" && (
           <>
             <TextInput
               data-autofocus
-              aria-label="Find a page or task"
-              placeholder="Try “failed requests”, “API URL”, “wiki”…"
+              aria-label="Search, jump or run a task"
+              placeholder="Search models, pages and tasks"
               value={query}
               onChange={(e) => {
                 setQuery(e.currentTarget.value);
                 setActive(0);
               }}
               leftSection={<IconSearch size={15} />}
+              rightSection={<IconCommand size={14} className="ws-dim" />}
+              size="md"
               role="combobox"
               aria-expanded
               aria-autocomplete="list"
               aria-controls="ws-results"
-              aria-activedescendant={
-                options[active] ? `ws-command-${active}` : undefined
-              }
+              aria-activedescendant={entries[active] ? `ws-command-${active}` : undefined}
               onKeyDown={(e) => {
-                if (!options.length || e.nativeEvent.isComposing) return;
+                if (!entries.length || e.nativeEvent.isComposing) return;
                 let i = active;
-                if (e.key === "ArrowDown") i = (active + 1) % options.length;
-                else if (e.key === "ArrowUp")
-                  i = (active + options.length - 1) % options.length;
+                if (e.key === "ArrowDown") i = (active + 1) % entries.length;
+                else if (e.key === "ArrowUp") i = (active + entries.length - 1) % entries.length;
                 else if (e.key === "Enter") {
                   e.preventDefault();
-                  choose(options[active].target);
+                  entries[active].choose();
                   return;
                 } else return;
                 e.preventDefault();
@@ -336,45 +416,40 @@ export function WorkspaceChrome({
                   ?.scrollIntoView({ block: "nearest" });
               }}
             />
-            <div
-              role="listbox"
-              aria-label="Pages and tasks"
-              id="ws-results"
-              className="ws-results"
-            >
-              {options.map((o, i) => (
+            <div role="listbox" aria-label="Pages, tasks and models" id="ws-results" className="ws-results">
+              {entries.map((entry, i) => (
                 <div
-                  key={o.target}
+                  key={entry.key}
                   role="option"
                   id={`ws-command-${i}`}
                   aria-selected={i === active}
+                  data-kind={entry.kind}
                   onMouseEnter={() => setActive(i)}
-                  onClick={() => choose(o.target)}
+                  onClick={entry.choose}
                 >
-                  <span className="ws-command-icon">
-                    {shortcuts.includes(o) ? (
-                      <IconTerminal2 size={15} />
-                    ) : (
-                      <IconArrowRight size={15} />
-                    )}
-                  </span>
-                  <span>
-                    <strong>{o.label}</strong>
-                    <small>{o.detail}</small>
+                  <span className="ws-command-icon">{entry.icon}</span>
+                  <span className="ws-command-text">
+                    <strong>{entry.label}</strong>
+                    <small>{entry.detail}</small>
                   </span>
                   <span className="ws-enter" aria-hidden>
                     ↵
                   </span>
                 </div>
               ))}
+              {!entries.length && (
+                <p className="ws-note" role="status">
+                  No matching page, task or model. Try a name or “health”.
+                </p>
+              )}
             </div>
-            {!options.length && (
-              <p className="ws-note" role="status">
-                No matching page or task. Try a page name or “health”.
-              </p>
-            )}
             <div className="ws-help">
-              ↑ ↓ to navigate <span>Enter to open · Esc to close</span>
+              <span>
+                <kbd>↑</kbd> <kbd>↓</kbd> move <kbd>↵</kbd> open <kbd>esc</kbd> close
+              </span>
+              {query.trim().length >= 2 && models.length > 0 && (
+                <span>{models.length} model{models.length === 1 ? "" : "s"}</span>
+              )}
             </div>
           </>
         )}
@@ -382,13 +457,11 @@ export function WorkspaceChrome({
           <>
             <div className="ws-readout" data-state={state}>
               <div>
-                <small>Core health</small>
+                <small>Core</small>
                 <strong>{status}</strong>
               </div>
               <div>
-                <small>
-                  {failed ? "Last successful read" : "Health read at"}
-                </small>
+                <small>{failed ? "Last successful read" : "Health read at"}</small>
                 <b>{checked}</b>
               </div>
               <div>
@@ -402,11 +475,10 @@ export function WorkspaceChrome({
             </div>
             {failed && (
               <p className="ws-note" role="status">
-                The latest health check failed. The last successful check is not
-                current status.
+                The latest health check failed. The last successful check is not current status.
               </p>
             )}
-            <div className="ws-section-title">Reported components</div>
+            <div className="ws-section-title">Components</div>
             <div className="ws-components">
               {data &&
                 !failed &&
@@ -421,18 +493,11 @@ export function WorkspaceChrome({
                     )}
                     <small
                       data-state={
-                        v?.ok === true
-                          ? "ok"
-                          : v?.ok === false
-                            ? "warn"
-                            : "unknown"
+                        v?.ok === true ? "ok" : v?.ok === false ? "warn" : "unknown"
                       }
                     >
-                      {v?.ok === true
-                        ? "OK"
-                        : v?.ok === false
-                          ? "Degraded"
-                          : "Unknown"}
+                      {v?.ok === true ? "OK" : v?.ok === false ? "Degraded" : "Unknown"}
+                      {v?.count != null ? ` · ${v.count}` : ""}
                     </small>
                   </div>
                 ))}
@@ -443,7 +508,7 @@ export function WorkspaceChrome({
             <div className="ws-settings">
               <NativeSelect
                 size="xs"
-                label="Auto-refresh interval"
+                label="Auto-refresh"
                 value={String(cadence)}
                 data={CADENCES.map((n) => ({
                   value: String(n),
@@ -458,12 +523,11 @@ export function WorkspaceChrome({
                 loading={checking}
                 onClick={check}
               >
-                Check health now
+                Check now
               </Button>
             </div>
             <p className="ws-note">
-              Checks read the core. They do not refresh provider balances or
-              send a model request.
+              Auto-refresh reloads the open page. It does not poll providers; the core does that on its own schedule.
             </p>
           </>
         )}
@@ -473,9 +537,7 @@ export function WorkspaceChrome({
               {MOCK ? "Preview environment" : "Client API base URL"}
             </div>
             {MOCK ? (
-              <p className="ws-note">
-                Demo mode uses fixtures, not a live router connection.
-              </p>
+              <p className="ws-note">Demo mode uses fixtures, not a live router connection.</p>
             ) : (
               <>
                 <div className="ws-endpoint">
@@ -487,8 +549,8 @@ export function WorkspaceChrome({
                     readOnly
                     onFocus={(e) => e.currentTarget.select()}
                   />
-                  <Button size="xs" variant="default" onClick={copyEndpoint}>
-                    Copy URL
+                  <Button size="xs" variant="default" onClick={() => copyEndpoint()}>
+                    Copy
                   </Button>
                 </div>
                 {copyState && (
@@ -510,27 +572,18 @@ export function WorkspaceChrome({
             </p>
             {!MOCK &&
               (!confirm ? (
-                <Button
-                  variant="default"
-                  size="xs"
-                  onClick={() => setConfirm(true)}
-                >
+                <Button variant="default" size="xs" onClick={() => setConfirm(true)}>
                   Forget local key…
                 </Button>
               ) : (
                 <div className="ws-confirm">
                   <p>
-                    This signs this browser out. It does not revoke the key on
-                    the router.
+                    This signs this browser out. It does not revoke the key on the router.
                   </p>
-                  <Button
-                    size="xs"
-                    variant="default"
-                    onClick={() => setConfirm(false)}
-                  >
+                  <Button size="xs" variant="default" onClick={() => setConfirm(false)}>
                     Keep session
                   </Button>
-                  <Button size="xs" color="red" onClick={lock}>
+                  <Button size="xs" color="red" leftSection={<IconKey size={13} />} onClick={lock}>
                     Forget key and sign out
                   </Button>
                 </div>

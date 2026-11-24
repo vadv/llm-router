@@ -1,10 +1,9 @@
 import { Badge, Button, Group, NativeSelect, TextInput } from "@mantine/core";
 import {
-  IconAdjustmentsHorizontal,
   IconCheck,
+  IconChevronDown,
   IconChevronRight,
   IconRotateClockwise2,
-  IconListDetails,
   IconSearch,
 } from "@tabler/icons-react";
 import { useRef, useState, type FormEvent } from "react";
@@ -83,6 +82,11 @@ export function HistoryPage() {
     );
   });
   const [timeError, setTimeError] = useState("");
+  // On a phone the filters wait behind their title, so the calls start
+  // near the top of the page.
+  const [filtersOpen, setFiltersOpen] = useState(() =>
+    window.matchMedia("(min-width: 56em)").matches,
+  );
   const bounds = interval ?? attempts ?? fixed;
   const family = routeParam("family") ?? "";
   const log = useRef<HTMLDivElement>(null);
@@ -118,6 +122,8 @@ export function HistoryPage() {
     family && `Model across providers: ${family}`,
     outcome && outcomes.find((o) => o.value === outcome)?.label,
   ].filter(Boolean);
+  // The default day is not a filter someone chose; a linked window is.
+  const activeCount = active.length + (attempts || fixed ? 1 : 0);
   function apply(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const params: Record<string, string> = {};
@@ -162,6 +168,7 @@ export function HistoryPage() {
     setIntervalFilter(null);
     setCursors([]);
     setQuery("");
+    setFiltersOpen(false);
     window.location.hash = drillUrl("history", params);
   }
   if (
@@ -171,26 +178,39 @@ export function HistoryPage() {
   ) {
     return (
       <div className="diag-page" role="alert">
-        Invalid time range. <a href="#/history">Reset request filters</a>
+        Invalid time range.{" "}
+        <a className="diag-action" href="#/history">
+          Reset request filters
+        </a>
       </div>
     );
   }
   return (
     <div className="diag-page">
-      <div className="ov-eyebrow">Diagnostics / Calls</div>
       <PageHeader
-        title="Request history"
-        description="Trace a client call from its pool to the final attempt. Only saved requests appear here."
-        actions={<Drill href="#/activity">See router events</Drill>}
+        title="Requests"
+        description="Every saved call, from the pool that took it to the attempt that answered."
+        actions={<Drill href="#/activity">Router events</Drill>}
       />
       <Panel
         p={0}
+        className="diag-filters"
+        data-open={filtersOpen || undefined}
         title={
-          <h2>
-            <IconAdjustmentsHorizontal size={17} /> Filter requests
-          </h2>
+          <>
+            <h2 className="diag-filters-title">Filters</h2>
+            <button
+              type="button"
+              className="diag-filters-toggle"
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen((open) => !open)}
+            >
+              Filters
+              {activeCount > 0 && <b>{activeCount} on</b>}
+              <IconChevronDown className="diag-filters-chevron" size={16} aria-hidden />
+            </button>
+          </>
         }
-        description="Filters search retained history before paging. Provider and model must match the same attempt."
       >
         <form onSubmit={apply} className="diag-history-form">
           <div className="diag-time-range">
@@ -211,9 +231,7 @@ export function HistoryPage() {
               defaultValue={initial ? fieldTime(initial.to) : ""}
             />
             <small>
-              {attempts ? "Attempt start" : "Request start"} · {timezone}
-              <br />
-              End time excluded. Clear both for all retained calls.
+              {attempts ? "Attempt start" : "Start time"} · {timezone} · end excluded. Clear both for every saved call.
             </small>
           </div>
           {timeError && (
@@ -431,12 +449,8 @@ function HistoryResults({
   return (
     <Panel
       p={0}
-      title={
-        <h2>
-          <IconListDetails size={17} /> Request log
-        </h2>
-      }
-      description="Newest first · open a call to inspect its attempts, tools and recorded previews."
+      title={<h2>Log</h2>}
+      description="Newest first. Open a call to see its attempts, tools and previews."
       actions={
         <Badge variant="default" tt="none">
           Page {page}

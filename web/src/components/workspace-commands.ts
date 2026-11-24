@@ -11,32 +11,72 @@ export const sections: Record<Route, string> = {
   wiki: "Reference",
   chat: "Workspace",
 };
-export const shortcuts = [
-  {
-    label: "Investigate failed requests",
-    target: "#/history?period=24h&outcome=error",
-    detail: "Requests · last 24 hours",
-    keywords: "errors failures troubleshooting",
-  },
-  {
-    label: "Inspect recent traffic",
-    target: "#/history?period=1h",
-    detail: "Requests · last hour",
-    keywords: "volume frequency spikes activity calls",
-  },
-  {
-    label: "Check system health",
-    target: "system",
-    detail: "Core checks & refresh settings",
-    keywords: "polling interval cadence pause uptime monitor",
-  },
-  {
-    label: "Find the client API URL",
-    target: "connection",
-    detail: "Endpoint & browser session",
-    keywords: "copy base endpoint key credential logout forget",
-  },
-];
+
+/// Tasks the command menu can do. A target that is not a `#/…` link names
+/// an action the shell performs itself.
+export type CommandAction =
+  | "system"
+  | "connection"
+  | "copy-api"
+  | "theme"
+  | "refresh-balances"
+  | "refresh-catalog";
+
+export const shortcuts: { label: string; target: string; detail: string; keywords: string }[] =
+  [
+    {
+      label: "Investigate failed requests",
+      target: "#/history?period=24h&outcome=error",
+      detail: "Requests · last 24 hours",
+      keywords: "errors failures troubleshooting",
+    },
+    {
+      label: "Inspect recent traffic",
+      target: "#/history?period=1h",
+      detail: "Requests · last hour",
+      keywords: "volume frequency spikes activity calls",
+    },
+    {
+      label: "Check system health",
+      target: "system",
+      detail: "Core checks & refresh settings",
+      keywords: "polling interval cadence pause uptime monitor",
+    },
+    {
+      label: "Find the client API URL",
+      target: "connection",
+      detail: "Endpoint & browser session",
+      keywords: "copy base endpoint key credential logout forget",
+    },
+    {
+      label: "Copy API base URL",
+      target: "copy-api",
+      detail: "The endpoint clients are configured with",
+      keywords: "copy base url endpoint v1 base_url openai client",
+    },
+    {
+      label: "Switch light or dark theme",
+      target: "theme",
+      detail: "Appearance of this browser",
+      keywords: "appearance light dark mode color scheme",
+    },
+    {
+      label: "Refresh balances",
+      target: "refresh-balances",
+      detail: "Ask the core to poll every connection",
+      keywords: "balances quota credits poll update",
+    },
+    {
+      label: "Refresh model catalogs",
+      target: "refresh-catalog",
+      detail: "Ask the core to re-list every connection",
+      keywords: "catalog models list update providers",
+    },
+  ];
+
+export function isAction(target: string): target is CommandAction {
+  return !target.startsWith("#");
+}
 
 export function findCommands(
   nav: readonly { route: Route; label: string }[],

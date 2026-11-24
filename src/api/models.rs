@@ -195,6 +195,7 @@ mod tests {
                 .unwrap(),
             ),
             knowledge_cfg: None,
+            research: Mutex::new(None),
         })
     }
 

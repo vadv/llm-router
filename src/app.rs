@@ -92,6 +92,7 @@ impl App {
             events,
             knowledge,
             knowledge_cfg: config.knowledge,
+            research: Mutex::new(None),
             balances: Mutex::new(balances),
             catalog_refresh: Mutex::new(HashMap::new()),
             refresh_running: std::sync::atomic::AtomicBool::new(false),

@@ -1,32 +1,46 @@
 .pb-launch {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(150px, max-content) minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding: 14px 16px;
-  border: 1px solid var(--mantine-color-default-border);
-  border-radius: var(--mantine-radius-md);
-  background: linear-gradient(
-    105deg,
-    var(--mantine-color-teal-light),
-    transparent 78%
-  );
-}
-.pb-launch > div > span {
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--mantine-color-teal-light-color);
-  font-weight: 700;
+  gap: 8px 18px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
 }
 .pb-launch h2 {
-  margin: 2px 0;
-  font-size: 18px;
-  letter-spacing: -0.035em;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
 }
-.pb-evidence { background: var(--pb-tint); border-radius: 8px; padding: 9px 12px; margin-bottom: 10px; min-width:0; }
+.pb-launch .pb-chooser-help {
+  margin: 2px 0 0;
+  max-width: 22ch;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.pb-launch-goals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+.pb-launch-choice { height:auto; padding:8px 10px; min-width:0; text-align:left; }
+.pb-launch-choice .mantine-Button-inner { justify-content:flex-start; }
+.pb-launch-choice .mantine-Button-label { flex:1; white-space:normal; }
+.pb-launch-choice .mantine-Button-section { margin-inline:2px; }
+.pb-launch-choice strong,.pb-launch-choice small { display:block; }
+.pb-launch-choice small { font-weight:450; color:var(--ink-soft); font-size:11.5px; line-height:1.35; }
+.pb-launch-choice strong { font-weight: 600; font-size: 12.5px; line-height: 1.35; }
+.pb-launch-go { opacity: 0; transition: opacity 120ms ease; }
+.pb-launch-choice:hover .pb-launch-go { opacity: 1; }
+@media (max-width: 62em) {
+  .pb-launch { grid-template-columns: minmax(0, 1fr); }
+}
+.pb-evidence { background: var(--accent-softer); border-radius: var(--radius-control); padding: 9px 12px; margin-bottom: 10px; min-width:0; }
 .pb-evidence p, .pb-eval small { margin: 2px 0; font-size:.74rem; color:var(--pb-muted); overflow-wrap:anywhere; }
 .pb-eval { font-size:.77rem; margin-top:4px; overflow-wrap:anywhere; }
 .pb-eval strong { color:var(--pb-accent); }
@@ -78,14 +92,13 @@
   background: var(--pb-tint);
   border-radius: 12px;
 }
-.pb-kicker {
+/* A caption for a block, in the same case as everything else. */
+.pb-label {
   display: block;
-  font-size: 10px;
+  font-size: 11.5px;
   line-height: 1.5;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--pb-accent);
+  font-weight: 600;
+  color: var(--pb-muted);
 }
 .pb-body {
   padding: 0;

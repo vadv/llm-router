@@ -181,6 +181,16 @@ export function PoolBuilder({
       needsImage,
     ],
   );
+  // What the Wiki cards say about context, for listings that state none.
+  const cardContext = useMemo(
+    () =>
+      new Map(
+        (index.state?.cards ?? []).flatMap((card) =>
+          card.context_window ? [[card.key, card.context_window] as const] : [],
+        ),
+      ),
+    [index.state?.cards],
+  );
   const sources = new Set(members.map((m) => m.provider_id)).size;
   const primaryContext =
     members[0] &&
@@ -247,12 +257,9 @@ export function PoolBuilder({
           <span className="pb-emblem">
             <IconRoute size={23} />
           </span>
-          <div>
-            <span className="pb-kicker">Pools / Route builder</span>
-            <span className="pb-dialog-name">
-              {draft.existing ? "Edit pool" : "New pool"}
-            </span>
-          </div>
+          <span className="pb-dialog-name">
+            {draft.existing ? "Edit pool" : "New pool"}
+          </span>
         </div>
       }
     >
@@ -295,10 +302,7 @@ export function PoolBuilder({
             aria-label="Model finder"
           >
             <div className="pb-title">
-              <div>
-                <span className="pb-kicker">Catalog</span>
-                <h3>Model finder</h3>
-              </div>
+              <h3>Model finder</h3>
               <span className="pb-count">
                 {entries ? `${entries.length} in catalog` : "Catalog"}
               </span>
@@ -328,9 +332,7 @@ export function PoolBuilder({
             </p>
             {visualGoal && (
               <div className="pb-evidence" aria-label="Model selection reasons">
-                <span className="pb-kicker">
-                  Selection reasons · saved Wiki
-                </span>
+                <span className="pb-label">Selection reasons · saved Wiki</span>
                 {visualGoal === "design" && (
                   <Checkbox
                     size="xs"
@@ -361,14 +363,14 @@ export function PoolBuilder({
                     <NativeSelect
                       label="Compare the same benchmark"
                       size="xs"
-                      value={evidence.metric.value}
+                      value={evidence.metric.id}
                       onChange={(e) => {
                         setBenchmark(e.currentTarget.value);
                         setLimit(PAGE);
                       }}
                       data={evidence.options.map((o) => ({
-                        value: o.value,
-                        label: o.label,
+                        value: o.id,
+                        label: `${o.label} (${o.count})`,
                       }))}
                     />
                     <p>
@@ -444,17 +446,25 @@ export function PoolBuilder({
                         <strong>{model.upstream_id}</strong>
                       </ModelHoverCard>
                       <span className="pb-meta">
-                        {model.provider_id} <i>·</i>{" "}
-                        {model.context_tokens
-                          ? `${contextWindow(model.context_tokens)} context`
-                          : "Context unknown"}
+                        {model.provider_id}
+                        {(model.context_tokens ?? cardContext.get(model.knowledge_key)) && (
+                          <>
+                            {" "}
+                            <i>·</i>{" "}
+                            {contextWindow(
+                              model.context_tokens ?? cardContext.get(model.knowledge_key)!,
+                            )}{" "}
+                            context
+                          </>
+                        )}
                       </span>
                       {result && (
                         <div className="pb-eval">
-                          <strong>{result.value}</strong> {result.metric}
+                          <strong>{result.rating.value}</strong>{" "}
+                          {result.benchmark.label}
                           <small>
-                            {result.source}
-                            {result.as_of ? ` · ${result.as_of}` : ""}
+                            {result.benchmark.source}
+                            {result.rating.as_of ? ` · ${result.rating.as_of}` : ""}
                           </small>
                         </div>
                       )}
@@ -553,10 +563,7 @@ export function PoolBuilder({
             aria-label="Route preview"
           >
             <div className="pb-title">
-              <div>
-                <span className="pb-kicker">Routing order</span>
-                <h3>Your route</h3>
-              </div>
+              <h3>Your route</h3>
               <IconLayersLinked size={22} />
             </div>
             <p className="pb-hint">

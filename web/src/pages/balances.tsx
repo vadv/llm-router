@@ -10,12 +10,7 @@ import {
   Text,
   UnstyledButton,
 } from "@mantine/core";
-import {
-  IconArrowUpRight,
-  IconCalendarClock,
-  IconChartLine,
-  IconWallet,
-} from "@tabler/icons-react";
+import { IconArrowUpRight, IconChartLine, IconRefresh } from "@tabler/icons-react";
 import { api, type Observation } from "../api";
 import {
   balanceReading,
@@ -51,6 +46,7 @@ const numberOf = (row: Observation, n: number) =>
 
 export function BalancesPage() {
   const state = usePoll(api.observations, []);
+  const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("All providers");
   const [selected, setSelected] = useState<string | null>(null);
   const providers = useMemo(() => {
@@ -85,12 +81,33 @@ export function BalancesPage() {
     setSelected(id(rows[0]));
     setSiblings(rows.map((row) => ({ value: id(row), label: row.resource })));
   };
+  // Ask the core to poll every connection now; the page then reads the result.
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await api.refresh("balances");
+      await state.reload();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <>
       <PageHeader
         title="Balances"
-        description="Account funds and reset windows, as last reported by each connection."
+        description="Funds and quotas as each connection last reported them."
+        actions={
+          <Button
+            size="compact-sm"
+            variant="default"
+            leftSection={<IconRefresh size={14} />}
+            loading={refreshing}
+            onClick={refresh}
+          >
+            Refresh
+          </Button>
+        }
       />
       <div
         className="balance-filters"
@@ -132,7 +149,7 @@ export function BalancesPage() {
         )
       ) : visible.length === 0 ? (
         <div className="balance-empty">
-          <IconWallet size={22} />
+          <IconChartLine size={18} />
           <h3>
             {scoped && !scope.length ? `No balance readings for ${scoped}` : providers.length
               ? `No providers marked ${filter.toLowerCase()}`
@@ -227,19 +244,16 @@ function ProviderCard({ provider, rows, low, exhausted, show }: CardProps) {
       </header>
       {accounts.length > 0 && (
         <section className="balance-account">
-          <h3>
-            <IconWallet size={14} />
-            Account balance
-          </h3>
+          <h3>Account</h3>
           {accounts.map((row) => (
-            <Reading key={id(row)} rows={[row]} show={show} />
+            <Reading key={id(row)} rows={[row]} show={show} section="account" sole={rows.length === 1} />
           ))}
         </section>
       )}
       {[...windows]
         .sort(([a], [b]) => windowRank(a) - windowRank(b) || a.localeCompare(b))
         .map(([name, group]) => (
-          <WindowGroup key={name} name={name} rows={group} show={show} />
+          <WindowGroup key={name} name={name} rows={group} show={show} sole={rows.length === 1} />
         ))}
       <footer>
         Last reading <RelTime unix={rows.reduce((t, r) => Math.max(t, r.observed_at_unix), 0)} />
@@ -252,10 +266,12 @@ function WindowGroup({
   name,
   rows,
   show,
+  sole,
 }: {
   name: string;
   rows: Observation[];
   show: CardProps["show"];
+  sole: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const groups = readingGroups(rows).sort(
@@ -266,12 +282,9 @@ function WindowGroup({
   );
   return (
     <section className="balance-window">
-      <h3>
-        <IconCalendarClock size={14} />
-        {name} quota
-      </h3>
+      <h3>{name} quota</h3>
       {(expanded ? groups : groups.slice(0, 3)).map((group) => (
-        <Reading key={id(group[0])} rows={group} show={show} />
+        <Reading key={id(group[0])} rows={group} show={show} section={name} sole={sole} />
       ))}
       {groups.length > 3 && (
         <Button
@@ -288,38 +301,62 @@ function WindowGroup({
   );
 }
 
-function Reading({ rows, show }: { rows: Observation[]; show: CardProps["show"] }) {
+function Reading({
+  rows,
+  show,
+  section,
+  sole,
+}: {
+  rows: Observation[];
+  show: CardProps["show"];
+  /// The heading the reading sits under. A resource that only repeats it
+  /// ("Account", then "account") is left out.
+  section?: string;
+  /// The connection's only reading: the card header already says how it
+  /// stands, so the reading does not repeat it.
+  sole?: boolean;
+}) {
   const row = rows[0];
   const { left, used, limit, percentLeft } = balanceReading(row);
   const risk = balanceRisk(row);
   const unit = unitOf(row);
-  const suffix = unit === "%" ? "%" : unit ? ` ${unit}` : "";
+  const percent = unit === "%";
+  const suffix = percent ? "%" : unit ? ` ${unit}` : "";
+  const echo = !!section && row.resource.trim().toLowerCase() === section.trim().toLowerCase();
   return (
     <div className="balance-reading" data-risk={risk}>
       <div className="balance-reading-head">
         <div>
-          <span className="balance-resource">
-            {rows.length > 1 ? (
-              `${row.metric} · ${rows.length} matching readings`
-            ) : (
-              <ModelHoverCard
-                upstreamId={looksLikeModelId(row.resource) ? row.resource : null}
-                providerId={row.provider_id}
-              >
-                {row.resource}
-              </ModelHoverCard>
-            )}
-          </span>
+          {!echo && (
+            <span className="balance-resource">
+              {rows.length > 1 ? (
+                `${row.metric} · ${rows.length} matching readings`
+              ) : (
+                <ModelHoverCard
+                  upstreamId={looksLikeModelId(row.resource) ? row.resource : null}
+                  providerId={row.provider_id}
+                >
+                  {row.resource}
+                </ModelHoverCard>
+              )}
+            </span>
+          )}
           <div className="balance-amount">
             {left !== null ? (
               <>
-                <strong>{numberOf(row, left)}</strong>
-                <span>{unit} left</span>
+                <strong>
+                  {numberOf(row, left)}
+                  {percent && "%"}
+                </strong>
+                <span>{unit && !percent ? `${unit} left` : "left"}</span>
               </>
             ) : used !== null ? (
               <>
-                <strong>{numberOf(row, used)}</strong>
-                <span>{unit} used</span>
+                <strong>
+                  {numberOf(row, used)}
+                  {percent && "%"}
+                </strong>
+                <span>{unit && !percent ? `${unit} used` : "used"}</span>
               </>
             ) : (
               <span>Amount not reported</span>
@@ -350,7 +387,7 @@ function Reading({ rows, show }: { rows: Observation[]; show: CardProps["show"] 
         </div>
       )}
       <div className="balance-meta">
-        {risk !== "ok" && (
+        {risk !== "ok" && !sole && (
           <Badge size="xs" color={risk === "low" ? "orange" : "red"} variant="light">
             {risk}
           </Badge>

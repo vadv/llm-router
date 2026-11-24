@@ -21,14 +21,22 @@ ssh "$HOST" '
   chmod +x /usr/bin/llm-router
   /etc/init.d/llm-gateway restart
   # First boot after an upgrade may build schema/indexes; poll up to 30s.
+  # A component that is down (an offline local engine, say) makes the core
+  # answer /health with 503 and the same body. BusyBox wget reports that as
+  # an error, so a 503 counts as up and is named.
+  alive() {
+    wget -qO- http://127.0.0.1:8090/health >/dev/null 2>&1 && return 0
+    wget -O- http://127.0.0.1:8090/health 2>&1 | grep -q "ERROR 503" && state=degraded
+  }
+  state=ok
   n=0
   while [ $n -lt 15 ]; do
-    wget -qO- http://127.0.0.1:8090/health >/dev/null 2>&1 && break
+    alive && break
     sleep 2
     n=$((n + 1))
   done
   [ $n -lt 15 ] || { echo "health check failed" >&2; exit 1; }
-  echo "health: ok (after $((n * 2 + 2))s)"
+  echo "health: $state (after $((n * 2 + 2))s)"
   md5sum /usr/bin/llm-router
 '
 echo "→ local md5"

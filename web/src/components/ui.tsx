@@ -6,7 +6,6 @@ import {
   Group,
   Paper,
   PasswordInput,
-  Stack,
   Switch,
   Text,
   ThemeIcon,
@@ -14,12 +13,12 @@ import {
   type BoxProps,
   type MantineColor,
 } from "@mantine/core";
-import { IconCheck, IconCopy, IconKey } from "@tabler/icons-react";
+import { IconArrowsExchange, IconCheck, IconCopy } from "@tabler/icons-react";
 import { type ReactNode, useState } from "react";
-import { keyStore } from "../api";
+import { api, keyStore } from "../api";
 import { ago, dateTime } from "../format";
 import { useNow } from "../hooks";
-import { api } from "../api";
+import "./ui.css";
 
 export type Tone = "ok" | "warn" | "bad" | "unknown";
 
@@ -27,6 +26,8 @@ export function Dot({ tone, live = false }: { tone: Tone; live?: boolean }) {
   return <span className="dot" data-tone={tone} data-live={live} />;
 }
 
+/// A moment shown as "3m ago", with the exact time one hover away. The help
+/// cursor says so: there is nothing to click.
 export function RelTime({ unix, fallback = "never" }: { unix: number | null | undefined; fallback?: string }) {
   const now = useNow();
   if (unix === null || unix === undefined || unix <= 0) {
@@ -45,7 +46,7 @@ export function RelTime({ unix, fallback = "never" }: { unix: number | null | un
   );
 }
 
-/// An identifier with a copy button. Ids are what users paste into configs.
+/// An identifier with a copy button. Ids are what people paste into configs.
 export function Copyable({
   value,
   children,
@@ -60,8 +61,13 @@ export function Copyable({
   return (
     <CopyButton value={value} timeout={1200}>
       {({ copied, copy }) => (
-        <Tooltip label={copied ? "copied" : "copy"} withArrow>
-          <button type="button" className="copy-id" aria-label={copied ? "Copied" : `Copy ${value}`} onClick={copy}>
+        <Tooltip label={copied ? "Copied" : "Copy"} withArrow>
+          <button
+            type="button"
+            className="copy-id"
+            aria-label={copied ? "Copied" : `Copy ${value}`}
+            onClick={copy}
+          >
             <Text
               component="code"
               size={size}
@@ -81,27 +87,27 @@ export function Copyable({
   );
 }
 
-/// Header of a page: title and optional actions. Descriptions are shown only
-/// when they carry non-obvious information.
-export function PageHeader({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
+/// How a page opens: one title, at most one line under it, and what can be
+/// done from here on the right.
+export function PageHeader({ title, description, actions }: { title: ReactNode; description?: ReactNode; actions?: ReactNode }) {
   return (
-    <Group component="header" className="page-heading" justify="space-between" align="center" mb="md" gap="sm">
-      <Box miw={0}>
-        <Text component="h1" fw={650} fz={24} lh={1.15} style={{ letterSpacing: "-.035em" }}>
+    <header className="page-heading">
+      <Box miw={0} style={{ flex: "1 1 280px" }}>
+        <Text component="h1" className="page-title">
           {title}
         </Text>
-        {description && (
-          <Text size="xs" c="dimmed" mt={2}>
-            {description}
-          </Text>
-        )}
+        {description && <p className="page-lede">{description}</p>}
       </Box>
-      {actions && <Group gap="xs">{actions}</Group>}
-    </Group>
+      {actions && (
+        <Group gap={8} wrap="wrap" style={{ flex: "0 0 auto" }}>
+          {actions}
+        </Group>
+      )}
+    </header>
   );
 }
 
-/// The standard card: a titled surface that holds one kind of data.
+/// The standard panel: a titled surface that holds one kind of data.
 export function Panel({
   title,
   description,
@@ -116,18 +122,16 @@ export function Panel({
 } & Omit<BoxProps, "title">) {
   const compact = props.p === 0 || props.p === "0";
   return (
-    <Paper withBorder radius="sm" p="sm" miw={0} {...props}>
+    <Paper withBorder radius="md" p="sm" miw={0} {...props}>
       {(title || actions) && (
         <Box px={compact ? "sm" : undefined} pt={compact ? "sm" : undefined}>
-          <Group justify="space-between" align="center" mb={description || children ? "xs" : 0} gap="xs" wrap="wrap">
-            <Box style={{ minWidth: 0 }}>
-              <Box fw={600} fz="sm">{title}</Box>
-              {description && (
-                <Box fz="xs" c="dimmed" mt={2}>{description}</Box>
-              )}
+          <div className="panel-head">
+            <Box miw={0}>
+              <Box className="panel-title">{title}</Box>
+              {description && <Box className="panel-lede">{description}</Box>}
             </Box>
             {actions}
-          </Group>
+          </div>
         </Box>
       )}
       {children}
@@ -135,8 +139,7 @@ export function Panel({
   );
 }
 
-/// Compact stat tile: label + value + optional hint, no icon circle.
-/// Designed to fit 6 per row on desktop.
+/// Compact stat tile: label, value, optional hint.
 export function Stat({
   label,
   value,
@@ -151,22 +154,72 @@ export function Stat({
   icon?: ReactNode;
 }) {
   return (
-    <Paper withBorder radius="sm" p="sm" h="100%">
-      <Group justify="space-between" align="center" mb={4} wrap="nowrap">
-        <Text size="xs" c="dimmed" tt="uppercase" fw={600} style={{ letterSpacing: 0.4 }}>
+    <Paper withBorder radius="md" p="sm" h="100%">
+      <Group justify="space-between" align="center" mb={6} wrap="nowrap">
+        <Text size="xs" c="dimmed" fw={500}>
           {label}
         </Text>
-        {icon && <Box c={tone ?? "gray"} opacity={0.7}>{icon}</Box>}
+        {icon && (
+          <Box c={tone ?? "gray"} opacity={0.6}>
+            {icon}
+          </Box>
+        )}
       </Group>
       <Text className="stat-value" c={tone}>
         {value}
       </Text>
       {hint && (
-        <Text size="xs" c="dimmed" mt={2} lineClamp={1}>
+        <Text size="xs" c="dimmed" mt={3} lineClamp={1}>
           {hint}
         </Text>
       )}
     </Paper>
+  );
+}
+
+/// Nothing to show, and what to do about it.
+export function EmptyState({
+  icon,
+  title,
+  children,
+  action,
+}: {
+  icon?: ReactNode;
+  title: ReactNode;
+  children?: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="empty">
+      {icon && (
+        <span className="empty-icon" aria-hidden>
+          {icon}
+        </span>
+      )}
+      <strong>{title}</strong>
+      {children && <p>{children}</p>}
+      {action}
+    </div>
+  );
+}
+
+/// A labelled control in a filter row. The label wraps the control, so the
+/// control needs no name of its own and a click anywhere reaches it.
+export function Field({
+  label,
+  children,
+  grow = false,
+}: {
+  label: ReactNode;
+  children: ReactNode;
+  /// Take the room the other fields leave.
+  grow?: boolean;
+}) {
+  return (
+    <label className={grow ? "field is-wide" : "field"}>
+      <span className="field-label">{label}</span>
+      {children}
+    </label>
   );
 }
 
@@ -179,14 +232,14 @@ const OUTCOME: Record<string, { color: string; label: string }> = {
 export function OutcomeBadge({ outcome }: { outcome: string | null }) {
   if (!outcome) {
     return (
-      <Badge color="gray" variant="light" size="sm" radius="sm" style={{ whiteSpace: "nowrap" }}>
+      <Badge color="gray" variant="light" size="sm" style={{ whiteSpace: "nowrap" }}>
         unknown
       </Badge>
     );
   }
   const known = OUTCOME[outcome];
   return (
-    <Badge color={known?.color ?? "gray"} variant="light" size="sm" radius="sm" style={{ whiteSpace: "nowrap" }}>
+    <Badge color={known?.color ?? "gray"} variant="light" size="sm" style={{ whiteSpace: "nowrap" }}>
       {known?.label ?? outcome}
     </Badge>
   );
@@ -225,49 +278,45 @@ export function KeyGate({ onUnlock }: { onUnlock: () => void }) {
   };
 
   return (
-    <Stack align="center" justify="center" mih="100dvh" px="md">
-      <Paper withBorder radius="lg" p="xl" w={380} maw="100%">
-        <Stack gap="md">
-          <Group gap="sm">
-            <ThemeIcon size={38} radius="md" variant="light" color="teal">
-              <IconKey size={20} />
-            </ThemeIcon>
-            <Box>
-              <Text fw={600}>llm-router</Text>
-              <Text size="xs" c="dimmed">
-                sign in with a client key
-              </Text>
-            </Box>
-          </Group>
-          <form onSubmit={submit}>
-            <Stack gap="sm">
-              <PasswordInput
-                label="Client key"
-                placeholder="paste a configured client key"
-                value={value}
-                onChange={(event) => setValue(event.currentTarget.value)}
-                data-autofocus
-                autoComplete="off"
-                error={error}
-                disabled={busy}
-              />
-              <Switch
-                size="xs"
-                label="Remember on this browser"
-                checked={persist}
-                onChange={(event) => setPersist(event.currentTarget.checked)}
-              />
-              <Button type="submit" loading={busy} disabled={!value.trim()} fullWidth>
-                Unlock
-              </Button>
-              <Text size="xs" c="dimmed">
-                The key stays in this browser storage and travels only to this core as a Bearer token.
-              </Text>
-            </Stack>
-          </form>
-        </Stack>
-      </Paper>
-    </Stack>
+    <main className="gate">
+      <form className="gate-card" onSubmit={submit} noValidate>
+        <div className="gate-brand">
+          <span className="brand-mark">
+            <IconArrowsExchange size={17} stroke={2} />
+          </span>
+          <div>
+            <h1>llm-router</h1>
+            <p>Sign in with a client key</p>
+          </div>
+        </div>
+        <PasswordInput
+          aria-label="Client key"
+          label="Client key"
+          placeholder="Paste a client key from the router config"
+          value={value}
+          onChange={(event) => setValue(event.currentTarget.value)}
+          data-autofocus
+          autoComplete="off"
+          error={error}
+          disabled={busy}
+          size="md"
+          styles={{ label: { fontSize: 12, fontWeight: 500, color: "var(--ink-soft)" } }}
+        />
+        <Switch
+          size="sm"
+          label="Keep me signed in on this browser"
+          checked={persist}
+          onChange={(event) => setPersist(event.currentTarget.checked)}
+          styles={{ label: { fontSize: 12.5 } }}
+        />
+        <Button type="submit" size="md" loading={busy} disabled={!value.trim()} fullWidth>
+          Unlock
+        </Button>
+        <p className="gate-note">
+          The key stays in this browser and is sent only to this router.
+        </p>
+      </form>
+    </main>
   );
 }
 
@@ -275,7 +324,7 @@ export function ColorBar({ percent, color }: { percent: number; color?: string }
   return (
     <Box
       h={6}
-      style={{ borderRadius: 999, background: "var(--mantine-color-default-border)", overflow: "hidden" }}
+      style={{ borderRadius: 999, background: "var(--surface-hover)", overflow: "hidden" }}
     >
       <Box
         h="100%"
@@ -288,7 +337,6 @@ export function ColorBar({ percent, color }: { percent: number; color?: string }
 }
 
 /// Inline sparkline: a tiny SVG line with gradient fill, no axes.
-/// Used inside stat tiles and compact panels.
 export function Sparkline({
   values,
   color = "var(--mantine-color-teal-5)",
@@ -312,15 +360,15 @@ export function Sparkline({
   const areaPath = `${linePath} L${width.toFixed(1)},${height.toFixed(1)} L0,${height.toFixed(1)} Z`;
   const gradId = `spark-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
   return (
-    <svg width={width} height={height} style={{ display: "block", overflow: "visible" }}>
+    <svg width={width} height={height} style={{ display: "block", overflow: "visible" }} aria-hidden>
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+          <stop offset="0%" stopColor={color} stopOpacity={0.22} />
           <stop offset="100%" stopColor={color} stopOpacity={0} />
         </linearGradient>
       </defs>
       <path d={areaPath} fill={`url(#${gradId})`} />
-      <path d={linePath} fill="none" stroke={color} strokeWidth={1.2} shapeRendering="geometricPrecision" />
+      <path d={linePath} fill="none" stroke={color} strokeWidth={1.3} shapeRendering="geometricPrecision" />
     </svg>
   );
 }

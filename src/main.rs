@@ -9,6 +9,7 @@ mod history;
 mod metamodel;
 mod model;
 mod provider;
+mod research;
 mod routing;
 mod schedule;
 mod storage;

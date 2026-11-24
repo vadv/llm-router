@@ -20,9 +20,9 @@
 .ux-breakdown,
 .ux-empty {
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--mantine-color-body);
-  padding: clamp(12px, 1.5vw, 20px);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  padding: clamp(12px, 1.5vw, 18px);
 }
 .ux-range,
 .ux-filters,
@@ -111,6 +111,17 @@
 .ux-inspect button:hover,
 .ux-table-head a:hover {
   background: var(--soft);
+}
+.ux-shortcuts button[data-active] {
+  background: var(--accent-soft);
+  border-radius: 5px;
+  color: var(--accent);
+}
+.ux-shortcuts-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--line);
 }
 .ux-controls > .ux-link {
   margin-top: 6px;
@@ -261,7 +272,7 @@
 }
 .ux-inspect button:disabled {
   opacity: 0.35;
-  cursor: auto;
+  cursor: not-allowed;
 }
 .ux-coverage:not(:empty) {
   border-top: 1px solid var(--line);
@@ -277,6 +288,9 @@
 .ux-table-head a {
   text-decoration: none;
   font-weight: 600;
+}
+.ux-export {
+  flex: none;
 }
 .ux-table-controls {
   margin: 14px 0 10px;

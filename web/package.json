@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "check": "node scripts/check-math.mjs && node scripts/check-chat.mjs && node scripts/check-sse.mjs && node scripts/check-tools.mjs && node scripts/check-store.mjs"
+    "check": "node scripts/check-math.mjs && node scripts/check-model-facts.mjs && node scripts/check-chat.mjs && node scripts/check-sse.mjs && node scripts/check-tools.mjs && node scripts/check-store.mjs",
+    "audit": "node scripts/audit-ui.mjs",
+    "readme": "node scripts/readme-images.mjs"
   },
   "dependencies": {
     "@assistant-ui/ai-sdk": "^0.0.19",
