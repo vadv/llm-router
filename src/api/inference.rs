@@ -138,6 +138,12 @@ pub async fn chat_completions(
     // Closed attempts of this request; a streaming attempt joins at
     // relay end, once its bytes have said everything they will.
     let attempts: Arc<Mutex<Vec<AttemptSummary>>> = Arc::new(Mutex::new(Vec::new()));
+    let mut open = OpenCall {
+        state: Arc::clone(&state),
+        base: base.clone(),
+        attempts: Arc::clone(&attempts),
+        armed: true,
+    };
 
     // The fallback loop: selection, retries, bans, pinning.
     let pinned_before = state.router.session_binding(&conversation);
@@ -156,6 +162,8 @@ pub async fn chat_completions(
             }
         })
         .await;
+    // From here on every path closes the call itself.
+    open.armed = false;
 
     match routed {
         Ok((response, end)) => {
@@ -194,6 +202,65 @@ pub async fn chat_completions(
             write_summary(&state, base, closed, outcome_of(&status));
             api_error(status, "api_error", &message)
         }
+    }
+}
+
+/// A call that is listed as running but has not yet got its answer. A
+/// client that hangs up before the first byte drops the handler at its
+/// await, and nothing else would end the call: it stayed "running" for as
+/// long as the core ran and never reached history. While `armed`, the drop
+/// closes the call as the client's cancel, as a hang-up mid-answer is.
+struct OpenCall {
+    state: Arc<ApiState>,
+    base: SummaryBase,
+    attempts: Arc<Mutex<Vec<AttemptSummary>>>,
+    armed: bool,
+}
+
+impl Drop for OpenCall {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let mut closed = drain_attempts(&self.attempts);
+        // The attempt in flight was cut short: how long it ran is known from
+        // the running view, how it went is not. The view goes first: writing
+        // the summary ends the call in it.
+        let running = self
+            .state
+            .running
+            .snapshot()
+            .into_iter()
+            .find(|request| request.id == self.base.id);
+        if let Some(attempt) =
+            running.and_then(|request| request.attempts.get(closed.len()).cloned())
+        {
+            closed.push(cut_attempt(attempt));
+        }
+        write_summary(&self.state, self.base.clone(), closed, "client_cancel");
+    }
+}
+
+/// The attempt a hang-up cut short.
+fn cut_attempt(open: crate::history::RunningAttempt) -> AttemptSummary {
+    let observation = AttemptObservation::default();
+    let finished_at_unix = now_unix();
+    AttemptSummary {
+        provider_id: open.provider_id,
+        upstream_id: open.upstream_id,
+        started_at_unix: open.started_at_unix,
+        finished_at_unix,
+        result: "client_cancel".into(),
+        error: None,
+        error_class: None,
+        duration_ms: Some((finished_at_unix - open.started_at_unix).max(0) * 1000),
+        switch_reason: None,
+        input_tokens: observation.input_tokens,
+        output_tokens: observation.output_tokens,
+        cost: observation.cost,
+        response: observation.response,
+        tool_calls: observation.tool_calls,
+        issues: observation.issues.0,
     }
 }
 
@@ -1073,6 +1140,65 @@ mod tests {
     /// record never landed, which is the actual failure.
     fn outcome_of_call(st: &Arc<ApiState>, id: &str) -> Option<String> {
         crate::api::tests_support::wait_history(st, id).and_then(|record| record.outcome)
+    }
+
+    /// The one call in the log, once the writer caught up with it.
+    fn the_call(st: &Arc<ApiState>) -> crate::storage::history::StoredHistoryRequest {
+        for _ in 0..300 {
+            if let Ok(history) = st.history.lock()
+                && let Ok(page) = history.list(&crate::storage::history::RequestFilter {
+                    limit: 10,
+                    ..Default::default()
+                })
+                && let Some(found) = page.into_iter().next()
+            {
+                return found;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("the call never reached the log");
+    }
+
+    #[tokio::test]
+    async fn a_client_that_hangs_up_before_the_first_byte_is_not_left_running() {
+        let server = wiremock::MockServer::start().await;
+        let st = upstream_state(&server.uri());
+        // The upstream holds its answer back for longer than the client waits.
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(30)),
+            )
+            .mount(&server)
+            .await;
+        let base = serve(&st).await;
+        let impatient = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(400))
+            .build()
+            .unwrap();
+        let given_up = impatient
+            .post(format!("{base}/v1/chat/completions"))
+            .header("authorization", "Bearer secret-one")
+            .json(&json!({"model": "pool", "messages": [{"role": "user", "content": "hello"}]}))
+            .send()
+            .await;
+        assert!(given_up.is_err(), "the client has given up");
+
+        for _ in 0..300 {
+            if st.running.snapshot().is_empty() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(
+            st.running.snapshot().is_empty(),
+            "a call whose client hung up is still listed as running"
+        );
+        // It is recorded like a hang-up mid-answer, with the attempt it was on.
+        let record = the_call(&st);
+        assert_eq!(record.outcome.as_deref(), Some("client_cancel"));
+        assert_eq!(record.attempts.len(), 1);
+        assert_eq!(record.attempts[0].result.as_deref(), Some("client_cancel"));
+        assert_eq!(record.attempts[0].upstream_id, "m-a");
     }
 
     #[tokio::test]
