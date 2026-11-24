@@ -238,12 +238,19 @@
 .diag-call-time button {
   font-size: 13px;
 }
+/* Calls in flight are listed, not opened: there is no saved call to show. */
+.diag-inflight .diag-call {
+  cursor: default;
+}
 .diag-call svg {
   color: var(--ov-muted);
 }
 @media (hover: hover) {
   .diag-call:hover {
     background: var(--mantine-color-default-hover);
+  }
+  .diag-inflight .diag-call:hover {
+    background: none;
   }
 }
 .diag-layout {
@@ -379,7 +386,7 @@
     font-size: 11px;
     font-weight: 500;
   }
-  .diag-call-time button {
+  .diag-call-time :is(button, strong) {
     font-size: 12px;
   }
   .diag-log-tools > .mantine-TextInput-root {

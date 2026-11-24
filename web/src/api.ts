@@ -312,6 +312,21 @@ export type RequestRecord = {
   attempts: Attempt[];
 };
 
+/// A call the core is serving right now. It lives in the core's memory
+/// only: once it ends, its row is written and listed by `requests`, while
+/// `running` stops naming it. The last attempt is the one in flight.
+export type RunningRequest = {
+  id: string;
+  metamodel: string;
+  key_alias: string;
+  started_at_unix: number;
+  attempts: {
+    provider_id: string;
+    upstream_id: string;
+    started_at_unix: number;
+  }[];
+};
+
 /// Server-side history query. `before_id` is the cursor for older pages.
 export type RequestBucket = { start: number; total: number; ok: number; errors: number; cancels: number; retried: number; peak_per_minute: number; first_start: number; last_start: number };
 export type RequestActivity = { from_unix: number | null; to_unix: number; as_of_unix: number; step_secs: number; buckets: RequestBucket[] };
@@ -468,6 +483,8 @@ export type Api = {
   usage: (query: UsageQuery) => Promise<UsagePage>;
   usageSpend: (provider: string | undefined, period: UsagePeriod) => Promise<SpendPage>;
   requests: (query: RequestQuery) => Promise<RequestRecord[]>;
+  /// Calls being served right now, oldest first.
+  running: () => Promise<RunningRequest[]>;
   requestActivity: (filters: Partial<RequestQuery>, period: string) => Promise<RequestActivity>;
   refresh: (what: RefreshWhat) => Promise<Record<string, RefreshStatus>>;
   bans: () => Promise<Ban[]>;
@@ -535,6 +552,9 @@ const realApi: Api = {
       (r) => r.requests,
     );
   },
+
+  running: () =>
+    call<{ running: RunningRequest[] }>("/v1/management/running").then((r) => r.running),
 
   requestActivity: (query, period) => {
     const params = requestSelection(query);
