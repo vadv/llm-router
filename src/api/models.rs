@@ -1,16 +1,18 @@
 // GET /v1/models — the OpenAI-style model list. Metamodels are the
 // client-facing models; providers and pool members are never exposed.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::{ApiState, api_error, bearer_secret, internal_error};
 
+use crate::metamodel::Metamodel;
 use crate::model::{CatalogError, ModelCatalog, ModelId, ProviderModel};
 
 pub async fn list_models(State(state): State<Arc<ApiState>>, headers: HeaderMap) -> Response {
@@ -70,6 +72,13 @@ pub async fn list_models(State(state): State<Arc<ApiState>>, headers: HeaderMap)
         if let Some(tokens) = context {
             model["context_length"] = json!(tokens);
         }
+        let (max_output, pricing) = card_facts(&state, metamodel);
+        if let Some(tokens) = max_output {
+            model["max_output_tokens"] = json!(tokens);
+        }
+        if let Some(pricing) = pricing {
+            model["pricing"] = pricing;
+        }
         data.push(model);
     }
 
@@ -78,6 +87,72 @@ pub async fn list_models(State(state): State<Arc<ApiState>>, headers: HeaderMap)
         Json(json!({ "object": "list", "data": data })),
     )
         .into_response()
+}
+
+/// What the members' cards say about a pool, read as `context_length` is:
+/// the smallest limit among the members that have one. A member without a
+/// card does not lower the output limit. A price is given only when every
+/// member has one and they are all the same: a fallback may cost otherwise,
+/// and a wrong price is worse than none.
+fn card_facts(state: &ApiState, metamodel: &Metamodel) -> (Option<u64>, Option<Value>) {
+    // Dollars per million tokens: input, output and, when known, cached input.
+    type Price = (f64, f64, Option<f64>);
+    let mut max_output: Option<u64> = None;
+    // None once a member turns out to have no price of its own.
+    let mut prices: Option<Vec<Price>> = Some(Vec::new());
+    let mut cards: HashMap<String, Option<Value>> = HashMap::new();
+    for member in metamodel.members() {
+        let key = crate::model::knowledge_key(member.upstream());
+        if !cards.contains_key(&key) {
+            let card = state
+                .knowledge
+                .get(&key)
+                .ok()
+                .flatten()
+                .and_then(|stored| serde_json::from_str(&stored.card_json).ok());
+            cards.insert(key.clone(), card);
+        }
+        let card = cards[&key].as_ref();
+        if let Some(tokens) = card
+            .and_then(|card| card.get("max_output_tokens"))
+            .and_then(Value::as_u64)
+        {
+            max_output = Some(max_output.map_or(tokens, |known| known.min(tokens)));
+        }
+        match (&mut prices, card.and_then(price_per_million)) {
+            (Some(list), Some(price)) => list.push(price),
+            _ => prices = None,
+        }
+    }
+    let pricing = prices.and_then(|list| {
+        let first = list.first()?;
+        list.iter().all(|price| price == first).then(|| {
+            let mut pricing = json!({
+                "input": first.0,
+                "output": first.1,
+                "unit": "per_1m_tokens",
+            });
+            if let Some(cached) = first.2 {
+                pricing["cache_read"] = json!(cached);
+            }
+            pricing
+        })
+    });
+    (max_output, pricing)
+}
+
+/// A card's price when it is in USD and names both an input and an output
+/// price.
+fn price_per_million(card: &Value) -> Option<(f64, f64, Option<f64>)> {
+    let pricing = card.get("pricing")?;
+    if pricing.get("currency").and_then(Value::as_str) != Some("USD") {
+        return None;
+    }
+    Some((
+        pricing.get("input_per_1m")?.as_f64()?,
+        pricing.get("output_per_1m")?.as_f64()?,
+        pricing.get("cached_input_per_1m").and_then(Value::as_f64),
+    ))
 }
 
 /// The read-side catalog: the SQLite snapshot plus static config entries.
@@ -268,6 +343,93 @@ mod tests {
         create_metamodel(&st, "pool", &[("p", "ghost")]);
         let (_, body) = get_models(&st, Some("secret-one")).await;
         assert!(body["data"][0].get("context_length").is_none());
+    }
+
+    /// A card as the core stores it, with the two facts the list reads.
+    fn card(st: &Arc<ApiState>, key: &str, max_output_tokens: u64, pricing: Value) {
+        st.knowledge
+            .upsert(&crate::storage::knowledge::NewCard {
+                key: key.into(),
+                card_json: json!({
+                    "description": "a model",
+                    "sources": ["https://example.test/model"],
+                    "max_output_tokens": max_output_tokens,
+                    "pricing": pricing,
+                })
+                .to_string(),
+                collected_at_unix: 1,
+                generator: "test".into(),
+            })
+            .unwrap();
+    }
+
+    fn usd(input: f64, cached_input: Option<f64>, output: f64) -> Value {
+        json!({
+            "currency": "USD",
+            "input_per_1m": input,
+            "cached_input_per_1m": cached_input,
+            "output_per_1m": output,
+        })
+    }
+
+    /// The listed entry of one pool.
+    fn entry(body: &Value, name: &str) -> Value {
+        body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|model| model["id"] == name)
+            .cloned()
+            .unwrap_or_else(|| panic!("{name} is not listed"))
+    }
+
+    #[tokio::test]
+    async fn max_output_tokens_is_the_minimum_of_known_limits() {
+        let st = state(vec![]);
+        card(&st, "big", 200_000, usd(1.4, Some(0.26), 0.016));
+        card(&st, "small", 32_768, usd(0.0, Some(0.0), 0.0));
+        create_metamodel(&st, "pool", &[("p", "big"), ("p", "small"), ("p", "ghost")]);
+        create_metamodel(&st, "blind", &[("p", "ghost")]);
+        let (_, body) = get_models(&st, Some("secret-one")).await;
+        // A member without a card does not lower the limit, as with the context.
+        assert_eq!(entry(&body, "pool")["max_output_tokens"], 32_768);
+        assert!(entry(&body, "blind").get("max_output_tokens").is_none());
+        // One member too many without a price: the pool names none.
+        assert!(entry(&body, "pool").get("pricing").is_none());
+    }
+
+    #[tokio::test]
+    async fn pricing_is_given_only_when_every_member_costs_the_same() {
+        let st = state(vec![]);
+        card(&st, "big", 1, usd(1.4, Some(0.26), 0.016));
+        card(&st, "small", 1, usd(0.0, None, 0.0));
+        card(
+            &st,
+            "euro",
+            1,
+            json!({ "currency": "EUR", "input_per_1m": 1.0, "cached_input_per_1m": null, "output_per_1m": 2.0 }),
+        );
+        // One model behind two spellings of its name: one card.
+        create_metamodel(&st, "same", &[("p", "vendor/big"), ("p", "big:free")]);
+        create_metamodel(&st, "mixed", &[("p", "big"), ("p", "small")]);
+        create_metamodel(&st, "unknown", &[("p", "big"), ("p", "ghost")]);
+        create_metamodel(&st, "euro", &[("p", "euro")]);
+        let (_, body) = get_models(&st, Some("secret-one")).await;
+        assert_eq!(
+            entry(&body, "same")["pricing"],
+            json!({ "input": 1.4, "output": 0.016, "cache_read": 0.26, "unit": "per_1m_tokens" })
+        );
+        assert_eq!(entry(&body, "same")["max_output_tokens"], 1);
+        for name in ["mixed", "unknown", "euro"] {
+            assert!(entry(&body, name).get("pricing").is_none(), "{name}");
+        }
+        // Free is a price too, when all of the pool is free.
+        create_metamodel(&st, "free", &[("p", "small")]);
+        let (_, body) = get_models(&st, Some("secret-one")).await;
+        assert_eq!(
+            entry(&body, "free")["pricing"],
+            json!({ "input": 0.0, "output": 0.0, "unit": "per_1m_tokens" })
+        );
     }
 
     #[tokio::test]
